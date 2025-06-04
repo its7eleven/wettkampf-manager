@@ -527,9 +527,9 @@ class WettkampfAdmin {
                     
                     <div class="export-buttons">
                         <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                           class="export-button csv">📊 CSV Export</a>
+                           class="export-button csv">📊 Teilnehmerliste CSV</a>
                         <a href="?page=wettkampf-anmeldungen&export=xlsx&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                           class="export-button xlsx">📋 Excel Export</a>
+                           class="export-button xlsx">📋 Teilnehmerliste Excel</a>
                         <?php if (!empty($wettkampf_filter)): ?>
                             <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                                class="export-button">📋 Teilnehmerliste</a>
@@ -669,27 +669,27 @@ class WettkampfAdmin {
         // Get data - use proper prepare statement
         if (empty($params)) {
             $anmeldungen = $wpdb->get_results("
-                SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
+                SELECT a.*
                 FROM $table_anmeldung a 
                 JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
-                ORDER BY w.datum ASC, a.anmeldedatum ASC
+                ORDER BY a.name ASC, a.vorname ASC
             ");
         } else {
             $anmeldungen = $wpdb->get_results($wpdb->prepare("
-                SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
+                SELECT a.*
                 FROM $table_anmeldung a 
                 JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
                 $where_clause
-                ORDER BY w.datum ASC, a.anmeldedatum ASC
+                ORDER BY a.name ASC, a.vorname ASC
             ", $params));
         }
         
         // Set headers for Excel download
-        $filename = 'anmeldungen_' . date('Y-m-d') . '.xls';
+        $filename = 'teilnehmerliste_' . date('Y-m-d') . '.xls';
         if (!empty($wettkampf_id)) {
             $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT name FROM $table_wettkampf WHERE id = %d", $wettkampf_id));
             if ($wettkampf) {
-                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_anmeldungen_' . date('Y-m-d') . '.xls';
+                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_teilnehmer_' . date('Y-m-d') . '.xls';
             }
         }
         
@@ -699,50 +699,12 @@ class WettkampfAdmin {
         header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
         header('Expires: 0');
         
-        // Start minimal Excel table
-        echo "Vorname\tName\tE-Mail\tGeschlecht\tJahrgang\tWettkampf\tWettkampf Datum\tWettkampf Ort\tEltern fahren\tFreie Plätze\tDisziplinen\tAnmeldedatum\n";
+        // Only participant names - super simple
+        echo "Teilnehmer\n";
         
-        // Data rows
+        // Data rows - only names
         foreach ($anmeldungen as $anmeldung) {
-            // Load disciplines
-            $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
-                SELECT d.name 
-                FROM $table_anmeldung_disziplinen ad 
-                JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
-                WHERE ad.anmeldung_id = %d 
-                ORDER BY d.sortierung ASC, d.name ASC
-            ", $anmeldung->id));
-            
-            $disziplin_names = array();
-            if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
-                foreach ($anmeldung_disziplinen as $d) {
-                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
-                        $disziplin_names[] = $d->name;
-                    }
-                }
-            }
-            
-            // Clean data for Excel (remove tabs and newlines)
-            $vorname = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->vorname);
-            $name = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->name);
-            $email = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->email);
-            $geschlecht = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->geschlecht);
-            $wettkampf_name = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->wettkampf_name);
-            $wettkampf_ort = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->wettkampf_ort);
-            $disziplinen_text = str_replace(array("\t", "\n", "\r"), ' ', !empty($disziplin_names) ? implode(', ', $disziplin_names) : '');
-            
-            echo $vorname . "\t";
-            echo $name . "\t";
-            echo $email . "\t";
-            echo $geschlecht . "\t";
-            echo $anmeldung->jahrgang . "\t";
-            echo $wettkampf_name . "\t";
-            echo date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . "\t";
-            echo $wettkampf_ort . "\t";
-            echo ($anmeldung->eltern_fahren ? 'Ja' : 'Nein') . "\t";
-            echo ($anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '') . "\t";
-            echo $disziplinen_text . "\t";
-            echo date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum)) . "\n";
+            echo $anmeldung->vorname . " " . $anmeldung->name . "\n";
         }
         
         exit;
