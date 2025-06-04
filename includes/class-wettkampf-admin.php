@@ -529,7 +529,7 @@ class WettkampfAdmin {
                         <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                            class="export-button csv">📊 CSV Export</a>
                         <a href="?page=wettkampf-anmeldungen&export=xlsx&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                           class="export-button">📋 XLSX Export</a>
+                           class="export-button xlsx">📋 XLSX Export</a>
                         <?php if (!empty($wettkampf_filter)): ?>
                             <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                                class="export-button">📋 Teilnehmerliste</a>
