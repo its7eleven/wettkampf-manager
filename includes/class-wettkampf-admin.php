@@ -421,45 +421,9 @@ class WettkampfAdmin {
             echo '<div class="notice notice-success"><p>Anmeldung gelöscht!</p></div>';
         }
         
-        // Handle edit action
-        if (isset($_POST['action']) && $_POST['action'] === 'edit_anmeldung' && wp_verify_nonce($_POST['anmeldung_nonce'], 'edit_anmeldung')) {
-            $anmeldung_id = intval($_POST['anmeldung_id']);
-            
-            $data = array(
-                'vorname' => sanitize_text_field($_POST['vorname']),
-                'name' => sanitize_text_field($_POST['name']),
-                'email' => sanitize_email($_POST['email']),
-                'geschlecht' => sanitize_text_field($_POST['geschlecht']),
-                'jahrgang' => intval($_POST['jahrgang']),
-                'eltern_fahren' => intval($_POST['eltern_fahren']),
-                'freie_plaetze' => (intval($_POST['eltern_fahren']) === 1) ? intval($_POST['freie_plaetze']) : 0
-            );
-            
-            $result = $wpdb->update($wpdb->prefix . 'wettkampf_anmeldung', $data, array('id' => $anmeldung_id));
-            
-            if ($result !== false) {
-                // Disziplin-Zuordnungen aktualisieren
-                $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
-                $wpdb->delete($table_anmeldung_disziplinen, array('anmeldung_id' => $anmeldung_id));
-                
-                if (isset($_POST['disziplinen']) && is_array($_POST['disziplinen'])) {
-                    foreach ($_POST['disziplinen'] as $disziplin_id) {
-                        $wpdb->insert($table_anmeldung_disziplinen, array(
-                            'anmeldung_id' => $anmeldung_id,
-                            'disziplin_id' => intval($disziplin_id)
-                        ));
-                    }
-                }
-                
-                echo '<div class="notice notice-success"><p>Anmeldung aktualisiert!</p></div>';
-            } else {
-                echo '<div class="notice notice-error"><p>Fehler beim Aktualisieren der Anmeldung!</p></div>';
-            }
-        }
-        
-        // Handle XLSX Export
-        if (isset($_GET['export']) && $_GET['export'] === 'xlsx' && wp_verify_nonce($_GET['_wpnonce'], 'export_anmeldungen')) {
-            $this->export_anmeldungen_xlsx($_GET['wettkampf_id'] ?? null);
+        // Handle CSV Export
+        if (isset($_GET['export']) && $_GET['export'] === 'csv' && wp_verify_nonce($_GET['_wpnonce'], 'export_anmeldungen')) {
+            $this->export_anmeldungen_csv(isset($_GET['wettkampf_id']) ? $_GET['wettkampf_id'] : null);
             return;
         }
         
@@ -471,8 +435,6 @@ class WettkampfAdmin {
         // Get filter parameters
         $wettkampf_filter = isset($_GET['wettkampf_id']) ? intval($_GET['wettkampf_id']) : '';
         $search = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
-        $edit_id = isset($_GET['edit']) ? intval($_GET['edit']) : null;
-        $view_id = isset($_GET['view']) ? intval($_GET['view']) : null;
         
         // Build WHERE clause
         $where_conditions = array('1=1');
@@ -502,54 +464,8 @@ class WettkampfAdmin {
             ORDER BY w.datum DESC, a.anmeldedatum DESC
         ", $where_params));
         
-        // Get all wettkämpfe for filter dropdown and edit form
+        // Get all wettkämpfe for filter dropdown
         $wettkaempfe = $wpdb->get_results("SELECT id, name, datum FROM $table_wettkampf ORDER BY datum DESC");
-        $alle_disziplinen = $wpdb->get_results("SELECT * FROM $table_disziplinen WHERE aktiv = 1 ORDER BY sortierung ASC, name ASC");
-        
-        // Get edit data
-        $edit_anmeldung = null;
-        $edit_disziplinen = array();
-        if ($edit_id) {
-            $edit_anmeldung = $wpdb->get_row($wpdb->prepare("
-                SELECT a.*, w.name as wettkampf_name 
-                FROM $table_anmeldung a 
-                JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
-                WHERE a.id = %d
-            ", $edit_id));
-            
-            if ($edit_anmeldung) {
-                $edit_disziplinen_result = $wpdb->get_results($wpdb->prepare("
-                    SELECT disziplin_id 
-                    FROM $table_anmeldung_disziplinen 
-                    WHERE anmeldung_id = %d
-                ", $edit_id));
-                foreach ($edit_disziplinen_result as $d) {
-                    $edit_disziplinen[] = $d->disziplin_id;
-                }
-            }
-        }
-        
-        // Get view data
-        $view_anmeldung = null;
-        $view_disziplinen = array();
-        if ($view_id) {
-            $view_anmeldung = $wpdb->get_row($wpdb->prepare("
-                SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
-                FROM $table_anmeldung a 
-                JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
-                WHERE a.id = %d
-            ", $view_id));
-            
-            if ($view_anmeldung) {
-                $view_disziplinen = $wpdb->get_results($wpdb->prepare("
-                    SELECT d.name 
-                    FROM $table_anmeldung_disziplinen ad 
-                    JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
-                    WHERE ad.anmeldung_id = %d 
-                    ORDER BY d.sortierung ASC, d.name ASC
-                ", $view_id));
-            }
-        }
         
         // Get statistics
         $total_anmeldungen = $wpdb->get_var("SELECT COUNT(*) FROM $table_anmeldung");
@@ -579,143 +495,6 @@ class WettkampfAdmin {
                 </div>
             </div>
             
-            <!-- Edit Form -->
-            <?php if ($edit_anmeldung): ?>
-            <div style="background: #fff; padding: 20px; margin: 20px 0; border: 1px solid #ccd0d4; border-radius: 4px;">
-                <h2>Anmeldung bearbeiten: <?php echo esc_html($edit_anmeldung->vorname . ' ' . $edit_anmeldung->name); ?></h2>
-                <form method="post">
-                    <input type="hidden" name="action" value="edit_anmeldung">
-                    <input type="hidden" name="anmeldung_id" value="<?php echo $edit_anmeldung->id; ?>">
-                    <?php wp_nonce_field('edit_anmeldung', 'anmeldung_nonce'); ?>
-                    
-                    <table class="form-table">
-                        <tr>
-                            <th><label for="edit_vorname">Vorname *</label></th>
-                            <td><input type="text" id="edit_vorname" name="vorname" value="<?php echo esc_attr($edit_anmeldung->vorname); ?>" class="regular-text" required></td>
-                        </tr>
-                        <tr>
-                            <th><label for="edit_name">Name *</label></th>
-                            <td><input type="text" id="edit_name" name="name" value="<?php echo esc_attr($edit_anmeldung->name); ?>" class="regular-text" required></td>
-                        </tr>
-                        <tr>
-                            <th><label for="edit_email">E-Mail *</label></th>
-                            <td><input type="email" id="edit_email" name="email" value="<?php echo esc_attr($edit_anmeldung->email); ?>" class="regular-text" required></td>
-                        </tr>
-                        <tr>
-                            <th><label for="edit_geschlecht">Geschlecht *</label></th>
-                            <td>
-                                <select id="edit_geschlecht" name="geschlecht" required>
-                                    <option value="männlich" <?php selected($edit_anmeldung->geschlecht, 'männlich'); ?>>Männlich</option>
-                                    <option value="weiblich" <?php selected($edit_anmeldung->geschlecht, 'weiblich'); ?>>Weiblich</option>
-                                    <option value="divers" <?php selected($edit_anmeldung->geschlecht, 'divers'); ?>>Divers</option>
-                                </select>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th><label for="edit_jahrgang">Jahrgang *</label></th>
-                            <td><input type="number" id="edit_jahrgang" name="jahrgang" value="<?php echo $edit_anmeldung->jahrgang; ?>" min="1900" max="<?php echo date('Y'); ?>" required></td>
-                        </tr>
-                        <tr>
-                            <th><label for="edit_eltern_fahren">Eltern fahren *</label></th>
-                            <td>
-                                <label><input type="radio" name="eltern_fahren" value="1" <?php checked($edit_anmeldung->eltern_fahren, 1); ?> onchange="toggleFreiePlaetze(this)"> Ja</label>
-                                <label style="margin-left: 15px;"><input type="radio" name="eltern_fahren" value="0" <?php checked($edit_anmeldung->eltern_fahren, 0); ?> onchange="toggleFreiePlaetze(this)"> Nein</label>
-                            </td>
-                        </tr>
-                        <tr id="freie_plaetze_row" style="<?php echo $edit_anmeldung->eltern_fahren ? '' : 'display: none;'; ?>">
-                            <th><label for="edit_freie_plaetze">Freie Plätze</label></th>
-                            <td><input type="number" id="edit_freie_plaetze" name="freie_plaetze" value="<?php echo $edit_anmeldung->freie_plaetze; ?>" min="0" max="10"></td>
-                        </tr>
-                        <tr>
-                            <th><label>Disziplinen</label></th>
-                            <td>
-                                <?php if (!empty($alle_disziplinen)): ?>
-                                    <div style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #f9f9f9;">
-                                        <?php foreach ($alle_disziplinen as $disziplin): ?>
-                                            <label style="display: block; margin-bottom: 5px;">
-                                                <input type="checkbox" name="disziplinen[]" value="<?php echo $disziplin->id; ?>" 
-                                                       <?php echo in_array($disziplin->id, $edit_disziplinen) ? 'checked' : ''; ?>>
-                                                <?php echo esc_html($disziplin->name); ?>
-                                            </label>
-                                        <?php endforeach; ?>
-                                    </div>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    </table>
-                    
-                    <p class="submit">
-                        <input type="submit" class="button-primary" value="Anmeldung aktualisieren">
-                        <a href="?page=wettkampf-anmeldungen" class="button">Abbrechen</a>
-                    </p>
-                </form>
-                
-                <script>
-                function toggleFreiePlaetze(radio) {
-                    const row = document.getElementById('freie_plaetze_row');
-                    if (radio.value === '1') {
-                        row.style.display = '';
-                    } else {
-                        row.style.display = 'none';
-                        document.getElementById('edit_freie_plaetze').value = '';
-                    }
-                }
-                </script>
-            </div>
-            <?php endif; ?>
-            
-            <!-- View Details -->
-            <?php if ($view_anmeldung): ?>
-            <div style="background: #fff; padding: 20px; margin: 20px 0; border: 1px solid #ccd0d4; border-radius: 4px;">
-                <h2>Anmeldung Details: <?php echo esc_html($view_anmeldung->vorname . ' ' . $view_anmeldung->name); ?></h2>
-                <table class="form-table">
-                    <tr>
-                        <th>Name:</th>
-                        <td><?php echo esc_html($view_anmeldung->vorname . ' ' . $view_anmeldung->name); ?></td>
-                    </tr>
-                    <tr>
-                        <th>E-Mail:</th>
-                        <td><?php echo esc_html($view_anmeldung->email); ?></td>
-                    </tr>
-                    <tr>
-                        <th>Geschlecht:</th>
-                        <td><?php echo esc_html($view_anmeldung->geschlecht); ?></td>
-                    </tr>
-                    <tr>
-                        <th>Jahrgang:</th>
-                        <td><?php echo esc_html($view_anmeldung->jahrgang); ?></td>
-                    </tr>
-                    <tr>
-                        <th>Wettkampf:</th>
-                        <td><?php echo esc_html($view_anmeldung->wettkampf_name); ?> (<?php echo date('d.m.Y', strtotime($view_anmeldung->wettkampf_datum)); ?>)</td>
-                    </tr>
-                    <tr>
-                        <th>Eltern fahren:</th>
-                        <td><?php echo $view_anmeldung->eltern_fahren ? 'Ja (' . $view_anmeldung->freie_plaetze . ' Plätze)' : 'Nein'; ?></td>
-                    </tr>
-                    <tr>
-                        <th>Disziplinen:</th>
-                        <td>
-                            <?php if (!empty($view_disziplinen)): ?>
-                                <?php echo implode(', ', array_map(function($d) { return esc_html($d->name); }, $view_disziplinen)); ?>
-                            <?php else: ?>
-                                Keine
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th>Anmeldedatum:</th>
-                        <td><?php echo date('d.m.Y H:i:s', strtotime($view_anmeldung->anmeldedatum)); ?></td>
-                    </tr>
-                </table>
-                
-                <p>
-                    <a href="?page=wettkampf-anmeldungen&edit=<?php echo $view_anmeldung->id; ?>" class="button-primary">Bearbeiten</a>
-                    <a href="?page=wettkampf-anmeldungen" class="button">Zurück zur Liste</a>
-                </p>
-            </div>
-            <?php endif; ?>
-            
             <!-- Filter and Export -->
             <div class="export-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
@@ -741,8 +520,12 @@ class WettkampfAdmin {
                     </div>
                     
                     <div class="export-buttons">
-                        <a href="?page=wettkampf-anmeldungen&export=xlsx&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                           class="export-button csv">📊 XLSX Export</a>
+                        <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
+                           class="export-button csv">📊 CSV Export</a>
+                        <?php if (!empty($wettkampf_filter)): ?>
+                            <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
+                               class="export-button">📋 Teilnehmerliste</a>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -759,17 +542,18 @@ class WettkampfAdmin {
                         <th style="width: 80px;">Geschlecht</th>
                         <th style="width: 80px;">Jahrgang</th>
                         <th style="width: 200px;">Wettkampf</th>
+                        <th style="width: 100px;">Datum</th>
                         <th style="width: 80px;">Eltern</th>
                         <th style="width: 80px;">Plätze</th>
                         <th style="width: 150px;">Disziplinen</th>
                         <th style="width: 120px;">Anmeldedatum</th>
-                        <th style="width: 150px;">Aktionen</th>
+                        <th style="width: 100px;">Aktionen</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($anmeldungen)): ?>
                         <tr>
-                            <td colspan="10" style="text-align: center; color: #666; font-style: italic; padding: 40px;">
+                            <td colspan="11" style="text-align: center; color: #666; font-style: italic; padding: 40px;">
                                 Keine Anmeldungen gefunden.
                                 <?php if (!empty($search) || !empty($wettkampf_filter)): ?>
                                     <br><a href="?page=wettkampf-anmeldungen">Alle Anmeldungen anzeigen</a>
@@ -806,6 +590,7 @@ class WettkampfAdmin {
                                     <strong><?php echo esc_html($anmeldung->wettkampf_name); ?></strong><br>
                                     <small><?php echo date('d.m.Y', strtotime($anmeldung->wettkampf_datum)); ?> - <?php echo esc_html($anmeldung->wettkampf_ort); ?></small>
                                 </td>
+                                <td><?php echo date('d.m.Y', strtotime($anmeldung->wettkampf_datum)); ?></td>
                                 <td>
                                     <?php if ($anmeldung->eltern_fahren): ?>
                                         <span style="color: green;">✓ Ja</span>
@@ -831,8 +616,6 @@ class WettkampfAdmin {
                                     <?php echo date('d.m.Y H:i', strtotime($anmeldung->anmeldedatum)); ?>
                                 </td>
                                 <td>
-                                    <a href="?page=wettkampf-anmeldungen&view=<?php echo $anmeldung->id; ?>" title="Anzeigen">👁️</a> |
-                                    <a href="?page=wettkampf-anmeldungen&edit=<?php echo $anmeldung->id; ?>" title="Bearbeiten">✏️</a> |
                                     <a href="?page=wettkampf-anmeldungen&delete=<?php echo $anmeldung->id; ?>&_wpnonce=<?php echo wp_create_nonce('delete_anmeldung'); ?>" 
                                        onclick="return confirm('Anmeldung wirklich löschen?')" 
                                        style="color: #d63638;" title="Löschen">🗑️</a>
@@ -846,220 +629,24 @@ class WettkampfAdmin {
             <div class="help-text">
                 <h4>💡 Hinweise zur Anmeldungsverwaltung:</h4>
                 <ul>
-                    <li><strong>Anzeigen (👁️):</strong> Vollständige Anmeldungsdetails einsehen</li>
-                    <li><strong>Bearbeiten (✏️):</strong> Anmeldungsdaten ändern und Disziplinen anpassen</li>
-                    <li><strong>Löschen (🗑️):</strong> Anmeldung komplett entfernen (inkl. Disziplin-Zuordnungen)</li>
-                    <li><strong>XLSX Export:</strong> Nur Spaltentitel und Anmeldungsdaten für Excel</li>
-                    <li><strong>Filter:</strong> Nach Wettkampf oder Name/E-Mail filtern</li>
+                    <li><strong>Filter:</strong> Verwenden Sie die Dropdown-Filter um spezifische Wettkämpfe oder Suchbegriffe zu finden</li>
+                    <li><strong>CSV Export:</strong> Exportiert alle gefilterten Anmeldungen als CSV-Datei für Excel</li>
+                    <li><strong>Teilnehmerliste:</strong> Generiert eine druckfreundliche Liste für einen spezifischen Wettkampf</li>
+                    <li><strong>Löschen:</strong> Beim Löschen werden auch alle Disziplin-Zuordnungen entfernt</li>
+                    <li><strong>Statistiken:</strong> Die Übersicht zeigt aktuelle Anmeldezahlen</li>
                 </ul>
             </div>
         </div>
         <?php
     }
     
-    // XLSX Export function - nur Titel und Daten
-    private function export_anmeldungen_xlsx($wettkampf_id = null) {
+    // CSV Export function
+    private function export_anmeldungen_csv($wettkampf_id = null) {
         global $wpdb;
         
         $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
         $table_wettkampf = $wpdb->prefix . 'wettkampf';
         $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
-        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
-        
-        // Build query
-        $where_clause = '';
-        $params = array();
-        
-        if (!empty($wettkampf_id)) {
-            $where_clause = ' WHERE a.wettkampf_id = %d';
-            $params[] = $wettkampf_id;
-        }
-        
-        $anmeldungen = $wpdb->get_results($wpdb->prepare("
-            SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
-            FROM $table_anmeldung a 
-            JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
-            $where_clause
-            ORDER BY w.datum ASC, a.anmeldedatum ASC
-        ", $params));
-        
-        // Set headers for CSV download (Excel kann CSV importieren)
-        $filename = 'anmeldungen_' . date('Y-m-d') . '.csv';
-        if (!empty($wettkampf_id)) {
-            $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT name FROM $table_wettkampf WHERE id = %d", $wettkampf_id));
-            if ($wettkampf) {
-                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_anmeldungen_' . date('Y-m-d') . '.csv';
-            }
-        }
-        
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-        header('Expires: 0');
-        
-        // Create CSV output
-        $output = fopen('php://output', 'w');
-        
-        // Add BOM for UTF-8
-        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
-        
-        // Nur Spaltentitel - vereinfacht
-        fputcsv($output, array(
-            'Vorname',
-            'Name', 
-            'E-Mail',
-            'Geschlecht',
-            'Jahrgang',
-            'Wettkampf',
-            'Eltern fahren',
-            'Freie Plätze',
-            'Disziplinen'
-        ), ';');
-        
-        // Nur Anmeldungsdaten - vereinfacht
-        foreach ($anmeldungen as $anmeldung) {
-            // Load disciplines
-            $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
-                SELECT d.name 
-                FROM $table_anmeldung_disziplinen ad 
-                JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
-                WHERE ad.anmeldung_id = %d 
-                ORDER BY d.sortierung ASC, d.name ASC
-            ", $anmeldung->id));
-            
-            $disziplin_names = array();
-            if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
-                foreach ($anmeldung_disziplinen as $d) {
-                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
-                        $disziplin_names[] = $d->name;
-                    }
-                }
-            }
-            
-            fputcsv($output, array(
-                $anmeldung->vorname,
-                $anmeldung->name,
-                $anmeldung->email,
-                $anmeldung->geschlecht,
-                $anmeldung->jahrgang,
-                $anmeldung->wettkampf_name,
-                $anmeldung->eltern_fahren ? 'Ja' : 'Nein',
-                $anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '',
-                !empty($disziplin_names) ? implode(', ', $disziplin_names) : ''
-            ), ';');
-        }
-        
-        exit;
-    }
-    
-    public function admin_settings() {
-        if (isset($_POST['submit'])) {
-            update_option('wettkampf_recaptcha_site_key', sanitize_text_field($_POST['recaptcha_site_key']));
-            update_option('wettkampf_recaptcha_secret_key', sanitize_text_field($_POST['recaptcha_secret_key']));
-            update_option('wettkampf_sender_email', sanitize_email($_POST['sender_email']));
-            update_option('wettkampf_sender_name', sanitize_text_field($_POST['sender_name']));
-            
-            echo '<div class="notice notice-success"><p>Einstellungen gespeichert!</p></div>';
-        }
-        
-        $recaptcha_site_key = get_option('wettkampf_recaptcha_site_key', '');
-        $recaptcha_secret_key = get_option('wettkampf_recaptcha_secret_key', '');
-        $sender_email = get_option('wettkampf_sender_email', get_option('admin_email'));
-        $sender_name = get_option('wettkampf_sender_name', get_option('blogname'));
-        
-        ?>
-        <div class="wrap">
-            <h1>Wettkampf Einstellungen</h1>
-            
-            <form method="post">
-                <table class="form-table">
-                    <tr>
-                        <th><label for="recaptcha_site_key">reCAPTCHA Site Key</label></th>
-                        <td>
-                            <input type="text" id="recaptcha_site_key" name="recaptcha_site_key" value="<?php echo esc_attr($recaptcha_site_key); ?>" class="regular-text">
-                        </td>
-                    </tr>
-                    <tr>
-                        <th><label for="recaptcha_secret_key">reCAPTCHA Secret Key</label></th>
-                        <td>
-                            <input type="text" id="recaptcha_secret_key" name="recaptcha_secret_key" value="<?php echo esc_attr($recaptcha_secret_key); ?>" class="regular-text">
-                        </td>
-                    </tr>
-                    <tr>
-                        <th><label for="sender_email">Absender E-Mail</label></th>
-                        <td>
-                            <input type="email" id="sender_email" name="sender_email" value="<?php echo esc_attr($sender_email); ?>" class="regular-text">
-                        </td>
-                    </tr>
-                    <tr>
-                        <th><label for="sender_name">Absender Name</label></th>
-                        <td>
-                            <input type="text" id="sender_name" name="sender_name" value="<?php echo esc_attr($sender_name); ?>" class="regular-text">
-                        </td>
-                    </tr>
-                </table>
-                
-                <p class="submit">
-                    <input type="submit" name="submit" class="button-primary" value="Einstellungen speichern">
-                </p>
-            </form>
-        </div>
-        <?php
-    }
-    
-    public function save_wettkampf() {
-        if (!wp_verify_nonce($_POST['wettkampf_nonce'], 'save_wettkampf')) {
-            wp_die('Sicherheitsfehler');
-        }
-        
-        if (!current_user_can('manage_options')) {
-            wp_die('Keine Berechtigung');
-        }
-        
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'wettkampf';
-        
-        $data = array(
-            'name' => sanitize_text_field($_POST['name']),
-            'datum' => sanitize_text_field($_POST['datum']),
-            'ort' => sanitize_text_field($_POST['ort']),
-            'beschreibung' => sanitize_textarea_field($_POST['beschreibung']),
-            'startberechtigte' => sanitize_textarea_field($_POST['startberechtigte']),
-            'anmeldeschluss' => sanitize_text_field($_POST['anmeldeschluss']),
-            'event_link' => esc_url_raw($_POST['event_link']),
-            'lizenziert' => isset($_POST['lizenziert']) ? 1 : 0
-        );
-        
-        if (isset($_POST['wettkampf_id']) && !empty($_POST['wettkampf_id'])) {
-            // Update existing
-            $wettkampf_id = intval($_POST['wettkampf_id']);
-            $wpdb->update($table_name, $data, array('id' => $wettkampf_id));
-        } else {
-            // Insert new
-            $wpdb->insert($table_name, $data);
-            $wettkampf_id = $wpdb->insert_id;
-        }
-        
-        // Disziplinen-Zuordnungen aktualisieren
-        $table_zuordnung = $wpdb->prefix . 'wettkampf_disziplin_zuordnung';
-        
-        // Alte Zuordnungen löschen
-        $wpdb->delete($table_zuordnung, array('wettkampf_id' => $wettkampf_id));
-        
-        // Neue Zuordnungen speichern
-        if (isset($_POST['disziplinen']) && is_array($_POST['disziplinen'])) {
-            foreach ($_POST['disziplinen'] as $disziplin_id) {
-                $wpdb->insert($table_zuordnung, array(
-                    'wettkampf_id' => $wettkampf_id,
-                    'disziplin_id' => intval($disziplin_id)
-                ));
-            }
-        }
-        
-        wp_redirect(admin_url('admin.php?page=wettkampf-manager'));
-        exit;
-    }
-}anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
         $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
         
         // Build query
