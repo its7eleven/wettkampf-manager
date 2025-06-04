@@ -527,9 +527,9 @@ class WettkampfAdmin {
                     
                     <div class="export-buttons">
                         <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                           class="export-button csv">📊 Teilnehmerliste CSV</a>
+                           class="export-button csv">📊 CSV Export</a>
                         <a href="?page=wettkampf-anmeldungen&export=xlsx&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                           class="export-button xlsx">📋 Teilnehmerliste Excel</a>
+                           class="export-button xlsx">📋 Excel Export</a>
                         <?php if (!empty($wettkampf_filter)): ?>
                             <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                                class="export-button">📋 Teilnehmerliste</a>
@@ -657,39 +657,44 @@ class WettkampfAdmin {
         $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
         $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
         
-        // Build query
-        $where_clause = '';
-        $params = array();
+        // Get filter parameters (same as in admin_anmeldungen)
+        $wettkampf_filter = isset($_GET['wettkampf_id']) ? intval($_GET['wettkampf_id']) : '';
+        $search = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
         
-        if (!empty($wettkampf_id)) {
-            $where_clause = ' WHERE a.wettkampf_id = %d';
-            $params[] = $wettkampf_id;
+        // Build WHERE clause (same logic as admin view)
+        $where_conditions = array('1=1');
+        $where_params = array();
+        
+        if (!empty($wettkampf_filter)) {
+            $where_conditions[] = 'a.wettkampf_id = %d';
+            $where_params[] = $wettkampf_filter;
         }
         
-        // Get data - use proper prepare statement
-        if (empty($params)) {
-            $anmeldungen = $wpdb->get_results("
-                SELECT a.*
-                FROM $table_anmeldung a 
-                JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
-                ORDER BY a.name ASC, a.vorname ASC
-            ");
-        } else {
-            $anmeldungen = $wpdb->get_results($wpdb->prepare("
-                SELECT a.*
-                FROM $table_anmeldung a 
-                JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
-                $where_clause
-                ORDER BY a.name ASC, a.vorname ASC
-            ", $params));
+        if (!empty($search)) {
+            $where_conditions[] = '(a.vorname LIKE %s OR a.name LIKE %s OR a.email LIKE %s)';
+            $search_param = '%' . $wpdb->esc_like($search) . '%';
+            $where_params[] = $search_param;
+            $where_params[] = $search_param;
+            $where_params[] = $search_param;
         }
+        
+        $where_clause = implode(' AND ', $where_conditions);
+        
+        // Get anmeldungen with wettkampf info (same query as admin view)
+        $anmeldungen = $wpdb->get_results($wpdb->prepare("
+            SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
+            FROM $table_anmeldung a 
+            JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
+            WHERE $where_clause
+            ORDER BY w.datum DESC, a.anmeldedatum DESC
+        ", $where_params));
         
         // Set headers for Excel download
-        $filename = 'teilnehmerliste_' . date('Y-m-d') . '.xls';
-        if (!empty($wettkampf_id)) {
-            $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT name FROM $table_wettkampf WHERE id = %d", $wettkampf_id));
+        $filename = 'anmeldungen_' . date('Y-m-d') . '.xls';
+        if (!empty($wettkampf_filter)) {
+            $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT name FROM $table_wettkampf WHERE id = %d", $wettkampf_filter));
             if ($wettkampf) {
-                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_teilnehmer_' . date('Y-m-d') . '.xls';
+                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_anmeldungen_' . date('Y-m-d') . '.xls';
             }
         }
         
@@ -699,12 +704,47 @@ class WettkampfAdmin {
         header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
         header('Expires: 0');
         
-        // Only participant names - super simple
-        echo "Teilnehmer\n";
+        // Headers - exactly like the admin table
+        echo "Name\tE-Mail\tGeschlecht\tJahrgang\tWettkampf\tDatum\tEltern\tPlätze\tDisziplinen\tAnmeldedatum\n";
         
-        // Data rows - only names
+        // Data rows
         foreach ($anmeldungen as $anmeldung) {
-            echo $anmeldung->vorname . " " . $anmeldung->name . "\n";
+            // Load disciplines for this registration
+            $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
+                SELECT d.name 
+                FROM $table_anmeldung_disziplinen ad 
+                JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
+                WHERE ad.anmeldung_id = %d 
+                ORDER BY d.sortierung ASC, d.name ASC
+            ", $anmeldung->id));
+            
+            $disziplin_names = array();
+            if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
+                foreach ($anmeldung_disziplinen as $d) {
+                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
+                        $disziplin_names[] = $d->name;
+                    }
+                }
+            }
+            
+            // Clean data for Excel (remove tabs and newlines)
+            $name = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->vorname . ' ' . $anmeldung->name);
+            $email = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->email);
+            $geschlecht = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->geschlecht);
+            $wettkampf_info = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->wettkampf_name);
+            $wettkampf_ort = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->wettkampf_ort);
+            $disziplinen_text = str_replace(array("\t", "\n", "\r"), ' ', !empty($disziplin_names) ? implode(', ', $disziplin_names) : 'Keine');
+            
+            echo $name . "\t";
+            echo $email . "\t";
+            echo $geschlecht . "\t";
+            echo $anmeldung->jahrgang . "\t";
+            echo $wettkampf_info . "\t";
+            echo date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . "\t";
+            echo ($anmeldung->eltern_fahren ? 'Ja' : 'Nein') . "\t";
+            echo ($anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '-') . "\t";
+            echo $disziplinen_text . "\t";
+            echo date('d.m.Y H:i', strtotime($anmeldung->anmeldedatum)) . "\n";
         }
         
         exit;
