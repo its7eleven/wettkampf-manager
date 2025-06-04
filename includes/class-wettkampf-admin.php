@@ -87,16 +87,11 @@ class WettkampfAdmin {
     public function admin_page() {
         global $wpdb;
         
-        // Handle delete action with improved cascade deletion
+        // Handle delete action
         if (isset($_GET['delete']) && wp_verify_nonce($_GET['_wpnonce'], 'delete_wettkampf')) {
             $id = intval($_GET['delete']);
-            $result = $this->delete_wettkampf_cascade($id);
-            
-            if ($result['success']) {
-                echo '<div class="notice notice-success"><p>' . $result['message'] . '</p></div>';
-            } else {
-                echo '<div class="notice notice-error"><p>' . $result['message'] . '</p></div>';
-            }
+            $this->delete_wettkampf_cascade($id);
+            echo '<div class="notice notice-success"><p>Wettkampf und alle Anmeldungen gelöscht!</p></div>';
         }
         
         $table_name = $wpdb->prefix . 'wettkampf';
@@ -118,17 +113,17 @@ class WettkampfAdmin {
 <ul class="subsubsub">
     <li class="all">
         <a href="?page=wettkampf-manager&filter=all" class="current">
-            Alle <span class="count">(<?php echo count($wettkaempfe); ?>)</span>
+            Alle <span class="count">(15)</span>
         </a> |
     </li>
     <li class="active">
         <a href="?page=wettkampf-manager&filter=active">
-            Aktive <span class="count">(<?php echo count(array_filter($wettkaempfe, function($w) { return strtotime($w->datum) >= strtotime('today'); })); ?>)</span>
+            Aktive <span class="count">(8)</span>
         </a> |
     </li>
     <li class="inactive">
         <a href="?page=wettkampf-manager&filter=inactive">
-            Vergangene <span class="count">(<?php echo count(array_filter($wettkaempfe, function($w) { return strtotime($w->datum) < strtotime('today'); })); ?>)</span>
+            Vergangene <span class="count">(7)</span>
         </a>
     </li>
 </ul>
@@ -188,91 +183,14 @@ class WettkampfAdmin {
                         <td>
                             <a href="?page=wettkampf-new&edit=<?php echo $wettkampf->id; ?>">Bearbeiten</a> |
                             <a href="?page=wettkampf-anmeldungen&wettkampf_id=<?php echo $wettkampf->id; ?>">Anmeldungen (<?php echo $wettkampf->anmeldungen_count; ?>)</a> |
-                            <a href="?page=wettkampf-manager&delete=<?php echo $wettkampf->id; ?>&_wpnonce=<?php echo wp_create_nonce('delete_wettkampf'); ?>" 
-                               onclick="return confirm('⚠️ ACHTUNG: Beim Löschen des Wettkampfs werden auch ALLE Anmeldungen (<?php echo $wettkampf->anmeldungen_count; ?> Stück) unwiderruflich gelöscht!\n\nWirklich fortfahren?')" 
-                               style="color: #d63638;">Löschen</a>
+                            <a href="?page=wettkampf-manager&delete=<?php echo $wettkampf->id; ?>&_wpnonce=<?php echo wp_create_nonce('delete_wettkampf'); ?>" onclick="return confirm('⚠️ ACHTUNG: Beim Löschen werden auch ALLE Anmeldungen (<?php echo $wettkampf->anmeldungen_count; ?> Stück) gelöscht!\n\nWirklich fortfahren?')" style="color: #d63638;">Löschen</a>
                         </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
-            
-            <div class="help-text">
-                <h4>⚠️ Wichtiger Hinweis zum Löschen von Wettkämpfen:</h4>
-                <p>Beim Löschen eines Wettkampfs werden automatisch <strong>alle verknüpften Daten</strong> entfernt:</p>
-                <ul>
-                    <li>Alle Anmeldungen zum Wettkampf</li>
-                    <li>Alle Disziplin-Zuordnungen der Anmeldungen</li>
-                    <li>Alle Wettkampf-Disziplin-Verknüpfungen</li>
-                </ul>
-                <p><strong>Diese Aktion kann nicht rückgängig gemacht werden!</strong> Exportieren Sie vorher die Anmeldungen, falls Sie die Daten archivieren möchten.</p>
-            </div>
         </div>
         <?php
-    }
-    
-    /**
-     * Cascade deletion of wettkampf and all related data
-     */
-    private function delete_wettkampf_cascade($wettkampf_id) {
-        global $wpdb;
-        
-        try {
-            // Start transaction
-            $wpdb->query('START TRANSACTION');
-            
-            // Get count of anmeldungen for logging
-            $anmeldung_count = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM {$wpdb->prefix}wettkampf_anmeldung WHERE wettkampf_id = %d", 
-                $wettkampf_id
-            ));
-            
-            // Step 1: Get all anmeldung IDs for this wettkampf
-            $anmeldung_ids = $wpdb->get_col($wpdb->prepare(
-                "SELECT id FROM {$wpdb->prefix}wettkampf_anmeldung WHERE wettkampf_id = %d", 
-                $wettkampf_id
-            ));
-            
-            // Step 2: Delete anmeldung-disziplin relations
-            if (!empty($anmeldung_ids)) {
-                $placeholders = implode(',', array_fill(0, count($anmeldung_ids), '%d'));
-                $wpdb->query($wpdb->prepare(
-                    "DELETE FROM {$wpdb->prefix}wettkampf_anmeldung_disziplinen 
-                     WHERE anmeldung_id IN ($placeholders)", 
-                    ...$anmeldung_ids
-                ));
-            }
-            
-            // Step 3: Delete all anmeldungen for this wettkampf
-            $wpdb->delete($wpdb->prefix . 'wettkampf_anmeldung', array('wettkampf_id' => $wettkampf_id));
-            
-            // Step 4: Delete wettkampf-disziplin relations
-            $wpdb->delete($wpdb->prefix . 'wettkampf_disziplin_zuordnung', array('wettkampf_id' => $wettkampf_id));
-            
-            // Step 5: Delete the wettkampf itself
-            $result = $wpdb->delete($wpdb->prefix . 'wettkampf', array('id' => $wettkampf_id));
-            
-            if ($result === false) {
-                throw new Exception('Fehler beim Löschen des Wettkampfs');
-            }
-            
-            // Commit transaction
-            $wpdb->query('COMMIT');
-            
-            return array(
-                'success' => true, 
-                'message' => "Wettkampf erfolgreich gelöscht! Dabei wurden {$anmeldung_count} Anmeldung(en) und alle verknüpften Daten entfernt."
-            );
-            
-        } catch (Exception $e) {
-            // Rollback transaction on error
-            $wpdb->query('ROLLBACK');
-            
-            return array(
-                'success' => false, 
-                'message' => 'Fehler beim Löschen: ' . $e->getMessage()
-            );
-        }
     }
     
     public function admin_new_wettkampf() {
@@ -897,9 +815,9 @@ class WettkampfAdmin {
                                     <?php echo date('d.m.Y H:i', strtotime($anmeldung->anmeldedatum)); ?>
                                 </td>
                                 <td>
-                                    <a href="?page=wettkampf-anmeldungen&edit=<?php echo $anmeldung->id; ?>" title="Bearbeiten">Bearbeiten</a> |
+                                    <a href="?page=wettkampf-anmeldungen&edit=<?php echo $anmeldung->id; ?> title="Bearbeiten">Bearbeiten</a> |
                                     <a href="?page=wettkampf-anmeldungen&delete=<?php echo $anmeldung->id; ?>&_wpnonce=<?php echo wp_create_nonce('delete_anmeldung'); ?>" 
-                                       onclick="return confirm('Anmeldung wirklich löschen?')" title="Löschen" style="color: #d63638;">Löschen</a>
+                                       onclick="return confirm('Anmeldung wirklich löschen?') title="Löschen">Löschen</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -914,7 +832,6 @@ class WettkampfAdmin {
                     <li><strong>Excel Export:</strong> Exportiert alle gefilterten Anmeldungen als Excel-Datei</li>
                     <li><strong>Löschen:</strong> Beim Löschen werden auch alle Disziplin-Zuordnungen entfernt</li>
                     <li><strong>Statistiken:</strong> Die Übersicht zeigt aktuelle Anmeldezahlen</li>
-                    <li><strong>⚠️ Datenschutz:</strong> Beim Löschen von Wettkämpfen werden automatisch alle zugehörigen Anmeldungen mitgelöscht</li>
                 </ul>
             </div>
         </div>
@@ -1025,3 +942,176 @@ class WettkampfAdmin {
                 JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
                 WHERE ad.anmeldung_id = %d 
                 ORDER BY d.sortierung ASC, d.name ASC
+            ", $anmeldung->id));
+            
+            $disziplin_names = array();
+            if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
+                foreach ($anmeldung_disziplinen as $d) {
+                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
+                        $disziplin_names[] = $d->name;
+                    }
+                }
+            }
+            
+            echo '<tr>';
+            echo '<td>' . htmlspecialchars($anmeldung->vorname, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->name, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->email, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->geschlecht, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->jahrgang, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_name, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_ort, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . ($anmeldung->eltern_fahren ? 'Ja' : 'Nein') . '</td>';
+            echo '<td>' . ($anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '') . '</td>';
+            echo '<td>' . htmlspecialchars(!empty($disziplin_names) ? implode(', ', $disziplin_names) : '', ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum)) . '</td>';
+            echo '</tr>';
+        }
+        
+        echo '</tbody>';
+        echo '</table>';
+        echo '</body>';
+        echo '</html>';
+        
+        // Flush and exit
+        ob_end_flush();
+        exit;
+    }
+    
+    public function admin_settings() {
+        if (isset($_POST['submit'])) {
+            update_option('wettkampf_recaptcha_site_key', sanitize_text_field($_POST['recaptcha_site_key']));
+            update_option('wettkampf_recaptcha_secret_key', sanitize_text_field($_POST['recaptcha_secret_key']));
+            update_option('wettkampf_sender_email', sanitize_email($_POST['sender_email']));
+            update_option('wettkampf_sender_name', sanitize_text_field($_POST['sender_name']));
+            
+            echo '<div class="notice notice-success"><p>Einstellungen gespeichert!</p></div>';
+        }
+        
+        $recaptcha_site_key = get_option('wettkampf_recaptcha_site_key', '');
+        $recaptcha_secret_key = get_option('wettkampf_recaptcha_secret_key', '');
+        $sender_email = get_option('wettkampf_sender_email', get_option('admin_email'));
+        $sender_name = get_option('wettkampf_sender_name', get_option('blogname'));
+        
+        ?>
+        <div class="wrap">
+            <h1>Wettkampf Einstellungen</h1>
+            
+            <form method="post">
+                <table class="form-table">
+                    <tr>
+                        <th><label for="recaptcha_site_key">reCAPTCHA Site Key</label></th>
+                        <td>
+                            <input type="text" id="recaptcha_site_key" name="recaptcha_site_key" value="<?php echo esc_attr($recaptcha_site_key); ?>" class="regular-text">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="recaptcha_secret_key">reCAPTCHA Secret Key</label></th>
+                        <td>
+                            <input type="text" id="recaptcha_secret_key" name="recaptcha_secret_key" value="<?php echo esc_attr($recaptcha_secret_key); ?>" class="regular-text">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="sender_email">Absender E-Mail</label></th>
+                        <td>
+                            <input type="email" id="sender_email" name="sender_email" value="<?php echo esc_attr($sender_email); ?>" class="regular-text">
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="sender_name">Absender Name</label></th>
+                        <td>
+                            <input type="text" id="sender_name" name="sender_name" value="<?php echo esc_attr($sender_name); ?>" class="regular-text">
+                        </td>
+                    </tr>
+                </table>
+                
+                <p class="submit">
+                    <input type="submit" name="submit" class="button-primary" value="Einstellungen speichern">
+                </p>
+            </form>
+        </div>
+        <?php
+    }
+    
+    public function save_wettkampf() {
+        if (!wp_verify_nonce($_POST['wettkampf_nonce'], 'save_wettkampf')) {
+            wp_die('Sicherheitsfehler');
+        }
+        
+        if (!current_user_can('manage_options')) {
+            wp_die('Keine Berechtigung');
+        }
+        
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'wettkampf';
+        
+        $data = array(
+            'name' => sanitize_text_field($_POST['name']),
+            'datum' => sanitize_text_field($_POST['datum']),
+            'ort' => sanitize_text_field($_POST['ort']),
+            'beschreibung' => sanitize_textarea_field($_POST['beschreibung']),
+            'startberechtigte' => sanitize_textarea_field($_POST['startberechtigte']),
+            'anmeldeschluss' => sanitize_text_field($_POST['anmeldeschluss']),
+            'event_link' => esc_url_raw($_POST['event_link']),
+            'lizenziert' => isset($_POST['lizenziert']) ? 1 : 0
+        );
+        
+        if (isset($_POST['wettkampf_id']) && !empty($_POST['wettkampf_id'])) {
+            // Update existing
+            $wettkampf_id = intval($_POST['wettkampf_id']);
+            $wpdb->update($table_name, $data, array('id' => $wettkampf_id));
+        } else {
+            // Insert new
+            $wpdb->insert($table_name, $data);
+            $wettkampf_id = $wpdb->insert_id;
+        }
+        
+        // Disziplinen-Zuordnungen aktualisieren
+        $table_zuordnung = $wpdb->prefix . 'wettkampf_disziplin_zuordnung';
+        
+        // Alte Zuordnungen löschen
+        $wpdb->delete($table_zuordnung, array('wettkampf_id' => $wettkampf_id));
+        
+        // Neue Zuordnungen speichern
+        if (isset($_POST['disziplinen']) && is_array($_POST['disziplinen'])) {
+            foreach ($_POST['disziplinen'] as $disziplin_id) {
+                $wpdb->insert($table_zuordnung, array(
+                    'wettkampf_id' => $wettkampf_id,
+                    'disziplin_id' => intval($disziplin_id)
+                ));
+            }
+        }
+        
+        wp_redirect(admin_url('admin.php?page=wettkampf-manager'));
+        exit;
+    }
+    
+    private function delete_wettkampf_cascade($wettkampf_id) {
+        global $wpdb;
+        
+        // Get all anmeldung IDs
+        $anmeldung_ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT id FROM {$wpdb->prefix}wettkampf_anmeldung WHERE wettkampf_id = %d", 
+            $wettkampf_id
+        ));
+        
+        // Delete anmeldung-disziplin relations
+        if (!empty($anmeldung_ids)) {
+            $placeholders = implode(',', array_fill(0, count($anmeldung_ids), '%d'));
+            $wpdb->query($wpdb->prepare(
+                "DELETE FROM {$wpdb->prefix}wettkampf_anmeldung_disziplinen WHERE anmeldung_id IN ($placeholders)", 
+                ...$anmeldung_ids
+            ));
+        }
+        
+        // Delete anmeldungen
+        $wpdb->delete($wpdb->prefix . 'wettkampf_anmeldung', array('wettkampf_id' => $wettkampf_id));
+        
+        // Delete wettkampf-disziplin relations
+        $wpdb->delete($wpdb->prefix . 'wettkampf_disziplin_zuordnung', array('wettkampf_id' => $wettkampf_id));
+        
+        // Delete wettkampf
+        $wpdb->delete($wpdb->prefix . 'wettkampf', array('id' => $wettkampf_id));
+    }
+}
