@@ -1,0 +1,791 @@
+/* Wettkampf Manager Frontend Styles - Modals Fixed */
+
+/* Basic container styling with moderate specificity */
+.wettkampf-liste {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    position: relative;
+    clear: both;
+}
+
+/* Wettkampf cards - force visibility */
+.wettkampf-liste .wettkampf-card {
+    background: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 5px !important;
+    margin-bottom: 24px !important;
+    padding: 28px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1) !important;
+    transition: all 0.2s ease-in-out;
+    position: relative !important;
+    overflow: hidden !important;
+    display: block !important;
+    width: auto !important;
+}
+
+.wettkampf-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%);
+    z-index: 1;
+}
+
+.wettkampf-card.expired {
+    background: #fefefe !important;
+    border-color: #fca5a5 !important;
+}
+
+.wettkampf-card.expired::before {
+    background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+}
+
+.wettkampf-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06) !important;
+}
+
+/* Header structure */
+.wettkampf-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    margin-bottom: 0 !important;
+    padding-bottom: 20px !important;
+    border-bottom: 1px solid #f3f4f6 !important;
+    position: relative;
+    z-index: 2;
+}
+
+.wettkampf-summary {
+    flex: 1;
+    margin-right: 15px;
+}
+
+.wettkampf-summary h3 {
+    margin: 0 0 12px 0 !important;
+    color: #111827 !important;
+    font-size: 1.5rem !important;
+    font-weight: 600 !important;
+    line-height: 1.3 !important;
+}
+
+.wettkampf-basic-info {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 16px !important;
+    align-items: center !important;
+    margin-top: 12px !important;
+}
+
+.datum-info,
+.ort-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #374151;
+    font-size: 0.95rem;
+    font-weight: 500;
+    background: #f8fafc;
+    padding: 5px 10px;
+    border-radius: 5px;
+    border: 1px solid #e5e7eb;
+}
+
+.lizenziert-badge {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 5px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.details-toggle {
+    background: #f9fafb !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 5px !important;
+    padding: 8px 10px !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: #374151 !important;
+    transition: all 0.15s ease-in-out;
+    min-width: 140px !important;
+    justify-content: center !important;
+    text-decoration: none;
+}
+
+.details-toggle:hover {
+    background: #3b82f6 !important;
+    color: white !important;
+    border-color: #3b82f6 !important;
+    text-decoration: none;
+}
+
+.details-toggle.active {
+    background: #3b82f6 !important;
+    color: white !important;
+    border-color: #3b82f6 !important;
+}
+
+.toggle-icon {
+    transition: transform 0.2s ease-in-out;
+    font-size: 12px;
+}
+
+.details-toggle.active .toggle-icon {
+    transform: rotate(180deg);
+}
+
+/* Details section */
+.wettkampf-details {
+    display: none;
+    overflow: hidden;
+    transition: all 0.3s ease-in-out;
+    border-radius: 5px;
+    margin-top: 20px;
+    position: relative;
+    z-index: 2;
+}
+
+.wettkampf-details.show {
+    display: block !important;
+    padding: 0;
+}
+
+.wettkampf-info {
+    margin-bottom: 25px;
+}
+
+.info-row {
+    margin-bottom: 0;
+    line-height: 1.6;
+    padding: 12px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-row strong {
+    color: #111827;
+    font-weight: 600;
+    display: inline-block;
+    min-width: 140px;
+    margin-bottom: 4px;
+}
+
+.anmeldung-section {
+    text-align: center;
+    margin: 30px 0;
+}
+
+.anmelde-button {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.anmelde-button:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    color: white;
+    text-decoration: none;
+}
+
+.anmeldung-geschlossen {
+    color: #dc2626;
+    font-weight: 600;
+    font-size: 16px;
+    margin: 0;
+    padding: 10px 20px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 5px;
+    display: inline-block;
+}
+
+.angemeldete-teilnehmer {
+    border-top: 1px solid #f3f4f6;
+    padding-top: 24px;
+    margin-top: 30px;
+}
+
+.angemeldete-teilnehmer h4 {
+    color: #111827;
+    margin-bottom: 20px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.angemeldete-teilnehmer h4::before {
+    content: '👥';
+    font-size: 1rem;
+}
+
+.teilnehmer-liste {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+.teilnehmer-item {
+    background: #ffffff;
+    padding: 5px 10px;
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #e5e7eb;
+    transition: all 0.15s ease-in-out;
+}
+
+.teilnehmer-item:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.teilnehmer-name {
+    font-weight: 500;
+    color: #111827;
+}
+
+.edit-anmeldung {
+    background: #f59e0b;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 6px 10px;
+    border-radius: 5px;
+    transition: all 0.15s ease-in-out;
+    color: white;
+    font-weight: 500;
+}
+
+.edit-anmeldung:hover {
+    background: #d97706;
+    transform: scale(1.05);
+}
+
+.view-anmeldung {
+    background: #6b7280;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 6px 10px;
+    border-radius: 5px;
+    transition: all 0.15s ease-in-out;
+    color: white;
+    font-weight: 500;
+}
+
+.view-anmeldung:hover {
+    background: #4b5563;
+    transform: scale(1.05);
+}
+
+/* Radio button styling */
+.radio-group {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 500;
+    margin-bottom: 0 !important;
+    transition: all 0.15s ease-in-out;
+    padding: 12px 18px;
+    border-radius: 5px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+}
+
+.radio-label:hover {
+    border-color: #3b82f6;
+    background: #eff6ff;
+}
+
+.radio-label input[type="radio"] {
+    margin-right: 10px;
+    transform: scale(1.2);
+    accent-color: #3b82f6;
+}
+
+.radio-label input[type="radio"].error {
+    outline: 2px solid #dc2626;
+    outline-offset: 2px;
+}
+
+.radio-label:has(input:checked) {
+    border-color: #3b82f6;
+    background: #3b82f6;
+    color: white;
+}
+
+.radio-label span {
+    color: inherit;
+    font-weight: 500;
+    font-size: 0.95rem;
+}
+
+.radio-label:has(input.error) {
+    border-color: #dc2626;
+    background: #fef2f2;
+    color: #dc2626;
+}
+
+/* Modal Styles - NO !important on display properties */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s ease-out;
+    overflow-y: auto;
+    padding: 20px 0;
+}
+
+@keyframes fadeIn {
+    from { 
+        opacity: 0;
+        backdrop-filter: blur(0px);
+    }
+    to { 
+        opacity: 1;
+        backdrop-filter: blur(4px);
+    }
+}
+
+.modal-content {
+    background: #ffffff;
+    margin: 0 auto;
+    padding: 32px;
+    border-radius: 5px;
+    width: 90%;
+    max-width: 600px;
+    position: relative;
+    animation: slideIn 0.3s ease-out;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    border: 1px solid #e5e7eb;
+    margin-top: max(40px, calc(var(--header-height, 0px) + 20px));
+    margin-bottom: 40px;
+}
+
+@keyframes slideIn {
+    from { 
+        transform: translateY(-20px) scale(0.98);
+        opacity: 0;
+    }
+    to { 
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.close {
+    color: #9ca3af;
+    float: right;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+    position: absolute;
+    right: 16px;
+    top: 16px;
+    width: 32px;
+    height: 32px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease-in-out;
+    background: #f3f4f6;
+}
+
+.close:hover,
+.close:focus {
+    color: #dc2626;
+    background: #fef2f2;
+}
+
+.modal h2 {
+    margin-top: 0;
+    margin-bottom: 24px;
+    color: #111827;
+    padding-right: 40px;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #111827;
+    font-size: 0.95rem;
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="number"],
+.form-group select {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    font-size: 16px;
+    transition: all 0.15s ease-in-out;
+    box-sizing: border-box;
+    background: #ffffff;
+    font-family: inherit;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="email"]:focus,
+.form-group input[type="number"]:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-group input.error,
+.form-group select.error {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+    background: #fef2f2;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid #f3f4f6;
+}
+
+.submit-button {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+}
+
+.submit-button:hover {
+    background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+}
+
+.cancel-button {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    padding: 12px 24px;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+}
+
+.cancel-button:hover {
+    background: #e5e7eb;
+    border-color: #9ca3af;
+}
+
+.delete-button {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+}
+
+.delete-button:hover {
+    background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+/* View modal specific styles */
+.view-info {
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.view-info h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #111827;
+    font-size: 1.2rem;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.info-grid strong {
+    color: #374151;
+    font-weight: 600;
+}
+
+.info-grid span {
+    color: #111827;
+}
+
+/* Messages */
+.success-message {
+    background: #f0fdf4;
+    color: #166534;
+    padding: 12px 16px;
+    border: 1px solid #bbf7d0;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    font-weight: 500;
+}
+
+.error-message {
+    background: #fef2f2;
+    color: #dc2626;
+    padding: 12px 16px;
+    border: 1px solid #fecaca;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    font-weight: 500;
+}
+
+/* Loading indicator */
+.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.spinner {
+    border: 2px solid rgba(59, 130, 246, 0.1);
+    border-top: 2px solid #3b82f6;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .wettkampf-liste {
+        padding: 15px;
+    }
+    
+    .wettkampf-card {
+        padding: 20px !important;
+        margin-bottom: 20px !important;
+    }
+    
+    .wettkampf-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 15px !important;
+    }
+    
+    .details-toggle {
+        align-self: stretch !important;
+        min-width: auto !important;
+    }
+    
+    .wettkampf-basic-info {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 10px !important;
+    }
+    
+    .datum-info,
+    .ort-info {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    
+    .wettkampf-summary h3 {
+        font-size: 1.3rem !important;
+    }
+    
+    .teilnehmer-liste {
+        grid-template-columns: 1fr;
+    }
+    
+    .modal-content {
+        margin-top: max(20px, calc(var(--header-height, 0px) + 10px));
+        margin-bottom: 20px;
+        padding: 24px;
+        width: 95%;
+        border-radius: 5px;
+    }
+    
+    .info-row strong {
+        min-width: auto;
+        display: block;
+        margin-bottom: 4px;
+    }
+    
+    .form-actions {
+        flex-direction: column-reverse;
+        gap: 12px;
+    }
+    
+    .form-actions button {
+        width: 100%;
+        padding: 14px;
+    }
+    
+    .radio-group {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .radio-label {
+        padding: 14px 18px;
+    }
+}
+
+@media (max-width: 480px) {
+    .wettkampf-card {
+        padding: 16px !important;
+        margin-bottom: 16px !important;
+    }
+    
+    .wettkampf-summary h3 {
+        font-size: 1.2rem !important;
+    }
+    
+    .modal-content {
+        margin-top: max(10px, calc(var(--header-height, 0px) + 5px));
+        margin-bottom: 10px;
+        padding: 20px;
+        border-radius: 5px;
+    }
+    
+    .anmelde-button {
+        width: 100%;
+        padding: 10px;
+        font-size: 16px;
+    }
+    
+    .details-toggle {
+        padding: 10px;
+        font-size: 15px;
+    }
+    
+    .teilnehmer-item {
+        padding: 14px 16px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .edit-anmeldung,
+    .view-anmeldung {
+        align-self: flex-end;
+    }
+    
+    .info-grid {
+        grid-template-columns: 1fr;
+        gap: 5px;
+    }
+    
+    .info-grid strong {
+        margin-bottom: 2px;
+    }
+    
+    .info-grid span {
+        margin-bottom: 10px;
+        padding-left: 10px;
+        border-left: 3px solid #e5e7eb;
+    }
+}
+
+/* Print styles */
+@media print {
+    .modal {
+        display: none !important;
+    }
+    
+    .anmelde-button,
+    .edit-anmeldung,
+    .view-anmeldung,
+    .details-toggle {
+        display: none !important;
+    }
+    
+    .wettkampf-card {
+        break-inside: avoid;
+        box-shadow: none !important;
+        border: 1px solid #000 !important;
+        background: white !important;
+    }
+    
+    .wettkampf-card::before {
+        display: none;
+    }
+}
