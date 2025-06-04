@@ -699,29 +699,8 @@ class WettkampfAdmin {
         header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
         header('Expires: 0');
         
-        // Start output
-        echo '<html>';
-        echo '<head>';
-        echo '<meta charset="UTF-8">';
-        echo '</head>';
-        echo '<body>';
-        echo '<table border="1">';
-        
-        // Headers
-        echo '<tr style="background-color: #f2f2f2; font-weight: bold;">';
-        echo '<td>Vorname</td>';
-        echo '<td>Name</td>';
-        echo '<td>E-Mail</td>';
-        echo '<td>Geschlecht</td>';
-        echo '<td>Jahrgang</td>';
-        echo '<td>Wettkampf</td>';
-        echo '<td>Wettkampf Datum</td>';
-        echo '<td>Wettkampf Ort</td>';
-        echo '<td>Eltern fahren</td>';
-        echo '<td>Freie Plätze</td>';
-        echo '<td>Disziplinen</td>';
-        echo '<td>Anmeldedatum</td>';
-        echo '</tr>';
+        // Start minimal Excel table
+        echo "Vorname\tName\tE-Mail\tGeschlecht\tJahrgang\tWettkampf\tWettkampf Datum\tWettkampf Ort\tEltern fahren\tFreie Plätze\tDisziplinen\tAnmeldedatum\n";
         
         // Data rows
         foreach ($anmeldungen as $anmeldung) {
@@ -743,25 +722,28 @@ class WettkampfAdmin {
                 }
             }
             
-            echo '<tr>';
-            echo '<td>' . htmlspecialchars($anmeldung->vorname, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->name, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->email, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->geschlecht, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->jahrgang, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_name, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_ort, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . ($anmeldung->eltern_fahren ? 'Ja' : 'Nein') . '</td>';
-            echo '<td>' . ($anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '') . '</td>';
-            echo '<td>' . htmlspecialchars(!empty($disziplin_names) ? implode(', ', $disziplin_names) : '', ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum)) . '</td>';
-            echo '</tr>';
+            // Clean data for Excel (remove tabs and newlines)
+            $vorname = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->vorname);
+            $name = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->name);
+            $email = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->email);
+            $geschlecht = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->geschlecht);
+            $wettkampf_name = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->wettkampf_name);
+            $wettkampf_ort = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->wettkampf_ort);
+            $disziplinen_text = str_replace(array("\t", "\n", "\r"), ' ', !empty($disziplin_names) ? implode(', ', $disziplin_names) : '');
+            
+            echo $vorname . "\t";
+            echo $name . "\t";
+            echo $email . "\t";
+            echo $geschlecht . "\t";
+            echo $anmeldung->jahrgang . "\t";
+            echo $wettkampf_name . "\t";
+            echo date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . "\t";
+            echo $wettkampf_ort . "\t";
+            echo ($anmeldung->eltern_fahren ? 'Ja' : 'Nein') . "\t";
+            echo ($anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '') . "\t";
+            echo $disziplinen_text . "\t";
+            echo date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum)) . "\n";
         }
-        
-        echo '</table>';
-        echo '</body>';
-        echo '</html>';
         
         exit;
     }
