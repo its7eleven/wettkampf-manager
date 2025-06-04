@@ -14,6 +14,26 @@ class WettkampfAdmin {
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_post_save_wettkampf', array($this, 'save_wettkampf'));
         add_action('admin_post_delete_wettkampf', array($this, 'delete_wettkampf'));
+        
+        // Enqueue admin scripts for anmeldungen page
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
+    }
+    
+    public function enqueue_admin_scripts($hook) {
+        // Only load on our admin pages
+        if (strpos($hook, 'wettkampf') !== false) {
+            // Load admin-specific CSS
+            wp_enqueue_style('wettkampf-admin', WETTKAMPF_PLUGIN_URL . 'assets/admin.css', array(), WETTKAMPF_VERSION);
+            
+            // Load admin-specific JS for anmeldungen page
+            if (isset($_GET['page']) && $_GET['page'] === 'wettkampf-anmeldungen') {
+                wp_enqueue_script('wettkampf-admin-js', WETTKAMPF_PLUGIN_URL . 'assets/admin.js', array('jquery'), WETTKAMPF_VERSION, true);
+                wp_localize_script('wettkampf-admin-js', 'wettkampf_admin_ajax', array(
+                    'ajax_url' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('wettkampf_admin_ajax')
+                ));
+            }
+        }
     }
     
     public function add_admin_menu() {
@@ -408,12 +428,6 @@ class WettkampfAdmin {
     public function admin_anmeldungen() {
         global $wpdb;
         
-        // Handle CSV Export - MOVED TO TOP BEFORE ANY OUTPUT
-        if (isset($_GET['export']) && $_GET['export'] === 'csv' && wp_verify_nonce($_GET['_wpnonce'], 'export_anmeldungen')) {
-            $this->export_anmeldungen_csv(isset($_GET['wettkampf_id']) ? $_GET['wettkampf_id'] : null);
-            exit; // Important: exit immediately after export
-        }
-        
         // Handle XLSX Export - MOVED TO TOP BEFORE ANY OUTPUT
         if (isset($_GET['export']) && $_GET['export'] === 'xlsx' && wp_verify_nonce($_GET['_wpnonce'], 'export_anmeldungen')) {
             $this->export_anmeldungen_xlsx(isset($_GET['wettkampf_id']) ? $_GET['wettkampf_id'] : null);
@@ -477,6 +491,7 @@ class WettkampfAdmin {
         $edit_anmeldung = null;
         if (isset($_GET['edit'])) {
             $edit_id = intval($_GET['edit']);
+            $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
             $edit_anmeldung = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_anmeldung WHERE id = %d", $edit_id));
         }
         
@@ -684,14 +699,8 @@ class WettkampfAdmin {
                     </div>
                     
                     <div class="export-buttons">
-                        <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                           class="export-button csv">📊 CSV Export</a>
                         <a href="?page=wettkampf-anmeldungen&export=xlsx&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                            class="export-button xlsx">📋 Excel Export</a>
-                        <?php if (!empty($wettkampf_filter)): ?>
-                            <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                               class="export-button">📋 Teilnehmerliste</a>
-                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -798,8 +807,7 @@ class WettkampfAdmin {
                 <h4>💡 Hinweise zur Anmeldungsverwaltung:</h4>
                 <ul>
                     <li><strong>Filter:</strong> Verwenden Sie die Dropdown-Filter um spezifische Wettkämpfe oder Suchbegriffe zu finden</li>
-                    <li><strong>CSV Export:</strong> Exportiert alle gefilterten Anmeldungen als CSV-Datei für Excel</li>
-                    <li><strong>Teilnehmerliste:</strong> Generiert eine druckfreundliche Liste für einen spezifischen Wettkampf</li>
+                    <li><strong>Excel Export:</strong> Exportiert alle gefilterten Anmeldungen als echte Excel-Datei</li>
                     <li><strong>Löschen:</strong> Beim Löschen werden auch alle Disziplin-Zuordnungen entfernt</li>
                     <li><strong>Statistiken:</strong> Die Übersicht zeigt aktuelle Anmeldezahlen</li>
                 </ul>
@@ -808,7 +816,7 @@ class WettkampfAdmin {
         <?php
     }
     
-    // XLSX Export function
+    // NEW: Proper XLSX Export function using PhpSpreadsheet-like approach
     private function export_anmeldungen_xlsx($wettkampf_id = null) {
         global $wpdb;
         
@@ -849,25 +857,72 @@ class WettkampfAdmin {
             ORDER BY w.datum DESC, a.anmeldedatum DESC
         ", $where_params));
         
-        // Set headers for Excel download
-        $filename = 'anmeldungen_' . date('Y-m-d') . '.xls';
+        // Generate filename
+        $filename = 'wettkampf_anmeldungen_' . date('Y-m-d_H-i') . '.xlsx';
         if (!empty($wettkampf_filter)) {
             $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT name FROM $table_wettkampf WHERE id = %d", $wettkampf_filter));
             if ($wettkampf) {
-                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_anmeldungen_' . date('Y-m-d') . '.xls';
+                $safe_name = preg_replace('/[^a-zA-Z0-9_-]/', '_', $wettkampf->name);
+                $filename = $safe_name . '_anmeldungen_' . date('Y-m-d_H-i') . '.xlsx';
             }
         }
         
-        // Set headers for Excel
-        header('Content-Type: application/vnd.ms-excel');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-        header('Expires: 0');
+        // Create a simple XML-based Excel file (Office Open XML format)
+        $excel_data = $this->create_excel_xml($anmeldungen, $table_anmeldung_disziplinen, $table_disziplinen);
         
-        // Headers - exactly like the admin table
-        echo "Name\tE-Mail\tGeschlecht\tJahrgang\tWettkampf\tDatum\tEltern\tPlätze\tDisziplinen\tAnmeldedatum\n";
+        // Set headers for Excel download
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+        header('Cache-Control: max-age=1');
+        header('Expires: Mon, 26 Jul 1997 05:00:00 GMT');
+        header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT');
+        header('Cache-Control: cache, must-revalidate');
+        header('Pragma: public');
+        
+        // Create temporary file
+        $temp_file = tempnam(sys_get_temp_dir(), 'wettkampf_export_');
+        $zip = new ZipArchive();
+        $zip->open($temp_file, ZipArchive::OVERWRITE);
+        
+        // Add Excel files to ZIP
+        $zip->addFromString('[Content_Types].xml', $this->get_content_types_xml());
+        $zip->addFromString('_rels/.rels', $this->get_rels_xml());
+        $zip->addFromString('xl/_rels/workbook.xml.rels', $this->get_workbook_rels_xml());
+        $zip->addFromString('xl/workbook.xml', $this->get_workbook_xml());
+        $zip->addFromString('xl/styles.xml', $this->get_styles_xml());
+        $zip->addFromString('xl/worksheets/sheet1.xml', $excel_data);
+        
+        $zip->close();
+        
+        // Output the file
+        readfile($temp_file);
+        unlink($temp_file);
+        
+        exit;
+    }
+    
+    private function create_excel_xml($anmeldungen, $table_anmeldung_disziplinen, $table_disziplinen) {
+        global $wpdb;
+        
+        $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n";
+        $xml .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' . "\n";
+        $xml .= '<sheetData>' . "\n";
+        
+        // Header row
+        $xml .= '<row r="1">' . "\n";
+        $headers = array('Vorname', 'Name', 'E-Mail', 'Geschlecht', 'Jahrgang', 'Wettkampf', 'Wettkampf Datum', 'Wettkampf Ort', 'Eltern fahren', 'Freie Plätze', 'Disziplinen', 'Anmeldedatum');
+        
+        for ($i = 0; $i < count($headers); $i++) {
+            $cell_ref = $this->get_cell_reference($i + 1, 1);
+            $xml .= '<c r="' . $cell_ref . '" t="str" s="1">';
+            $xml .= '<v>' . htmlspecialchars($headers[$i], ENT_XML1) . '</v>';
+            $xml .= '</c>' . "\n";
+        }
+        $xml .= '</row>' . "\n";
         
         // Data rows
+        $row_num = 2;
         foreach ($anmeldungen as $anmeldung) {
             // Load disciplines for this registration
             $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
@@ -887,111 +942,9 @@ class WettkampfAdmin {
                 }
             }
             
-            // Clean data for Excel (remove tabs and newlines)
-            $name = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->vorname . ' ' . $anmeldung->name);
-            $email = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->email);
-            $geschlecht = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->geschlecht);
-            $wettkampf_info = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->wettkampf_name);
-            $wettkampf_ort = str_replace(array("\t", "\n", "\r"), ' ', $anmeldung->wettkampf_ort);
-            $disziplinen_text = str_replace(array("\t", "\n", "\r"), ' ', !empty($disziplin_names) ? implode(', ', $disziplin_names) : 'Keine');
+            $xml .= '<row r="' . $row_num . '">' . "\n";
             
-            echo $name . "\t";
-            echo $email . "\t";
-            echo $geschlecht . "\t";
-            echo $anmeldung->jahrgang . "\t";
-            echo $wettkampf_info . "\t";
-            echo date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . "\t";
-            echo ($anmeldung->eltern_fahren ? 'Ja' : 'Nein') . "\t";
-            echo ($anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '-') . "\t";
-            echo $disziplinen_text . "\t";
-            echo date('d.m.Y H:i', strtotime($anmeldung->anmeldedatum)) . "\n";
-        }
-        
-        exit;
-    }
-
-    private function export_anmeldungen_csv($wettkampf_id = null) {
-        global $wpdb;
-        
-        $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
-        $table_wettkampf = $wpdb->prefix . 'wettkampf';
-        $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
-        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
-        
-        // Build query
-        $where_clause = '';
-        $params = array();
-        
-        if (!empty($wettkampf_id)) {
-            $where_clause = ' WHERE a.wettkampf_id = %d';
-            $params[] = $wettkampf_id;
-        }
-        
-        $anmeldungen = $wpdb->get_results($wpdb->prepare("
-            SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
-            FROM $table_anmeldung a 
-            JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
-            $where_clause
-            ORDER BY w.datum ASC, a.anmeldedatum ASC
-        ", $params));
-        
-        // Set headers for CSV download
-        $filename = 'anmeldungen_' . date('Y-m-d') . '.csv';
-        if (!empty($wettkampf_id)) {
-            $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT name FROM $table_wettkampf WHERE id = %d", $wettkampf_id));
-            if ($wettkampf) {
-                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_anmeldungen_' . date('Y-m-d') . '.csv';
-            }
-        }
-        
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-        header('Expires: 0');
-        
-        // Create CSV output
-        $output = fopen('php://output', 'w');
-        
-        // Add BOM for UTF-8
-        fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
-        
-        // CSV Headers
-        fputcsv($output, array(
-            'Vorname',
-            'Name',
-            'E-Mail',
-            'Geschlecht',
-            'Jahrgang',
-            'Wettkampf',
-            'Wettkampf Datum',
-            'Wettkampf Ort',
-            'Eltern fahren',
-            'Freie Plätze',
-            'Disziplinen',
-            'Anmeldedatum'
-        ), ';');
-        
-        // CSV Data
-        foreach ($anmeldungen as $anmeldung) {
-            // Load disciplines
-            $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
-                SELECT d.name 
-                FROM $table_anmeldung_disziplinen ad 
-                JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
-                WHERE ad.anmeldung_id = %d 
-                ORDER BY d.sortierung ASC, d.name ASC
-            ", $anmeldung->id));
-            
-            $disziplin_names = array();
-            if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
-                foreach ($anmeldung_disziplinen as $d) {
-                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
-                        $disziplin_names[] = $d->name;
-                    }
-                }
-            }
-            
-            fputcsv($output, array(
+            $data = array(
                 $anmeldung->vorname,
                 $anmeldung->name,
                 $anmeldung->email,
@@ -1004,11 +957,117 @@ class WettkampfAdmin {
                 $anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '',
                 !empty($disziplin_names) ? implode(', ', $disziplin_names) : '',
                 date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum))
-            ), ';');
+            );
+            
+            for ($i = 0; $i < count($data); $i++) {
+                $cell_ref = $this->get_cell_reference($i + 1, $row_num);
+                $value = htmlspecialchars($data[$i], ENT_XML1);
+                
+                // Determine cell type
+                if ($i == 4) { // Jahrgang - number
+                    $xml .= '<c r="' . $cell_ref . '">';
+                    $xml .= '<v>' . $value . '</v>';
+                } else {
+                    $xml .= '<c r="' . $cell_ref . '" t="str">';
+                    $xml .= '<v>' . $value . '</v>';
+                }
+                $xml .= '</c>' . "\n";
+            }
+            
+            $xml .= '</row>' . "\n";
+            $row_num++;
         }
         
-        fclose($output);
-        exit;
+        $xml .= '</sheetData>' . "\n";
+        $xml .= '</worksheet>' . "\n";
+        
+        return $xml;
+    }
+    
+    private function get_cell_reference($col, $row) {
+        $col_letter = '';
+        $col--;
+        while ($col >= 0) {
+            $col_letter = chr(65 + ($col % 26)) . $col_letter;
+            $col = intval($col / 26) - 1;
+        }
+        return $col_letter . $row;
+    }
+    
+    private function get_content_types_xml() {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+    <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+    <Default Extension="xml" ContentType="application/xml"/>
+    <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+    <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+    <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>';
+    }
+    
+    private function get_rels_xml() {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>';
+    }
+    
+    private function get_workbook_rels_xml() {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+    <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+    <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>';
+    }
+    
+    private function get_workbook_xml() {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+    <sheets>
+        <sheet name="Anmeldungen" sheetId="1" r:id="rId1"/>
+    </sheets>
+</workbook>';
+    }
+    
+    private function get_styles_xml() {
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+    <fonts count="2">
+        <font>
+            <sz val="11"/>
+            <name val="Calibri"/>
+        </font>
+        <font>
+            <b/>
+            <sz val="11"/>
+            <name val="Calibri"/>
+        </font>
+    </fonts>
+    <fills count="2">
+        <fill>
+            <patternFill patternType="none"/>
+        </fill>
+        <fill>
+            <patternFill patternType="gray125"/>
+        </fill>
+    </fills>
+    <borders count="1">
+        <border>
+            <left/>
+            <right/>
+            <top/>
+            <bottom/>
+            <diagonal/>
+        </border>
+    </borders>
+    <cellStyleXfs count="1">
+        <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+    </cellStyleXfs>
+    <cellXfs count="2">
+        <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+        <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/>
+    </cellXfs>
+</styleSheet>';
     }
     
     public function admin_settings() {

@@ -3,7 +3,7 @@
  * Plugin Name: Wettkampf Manager
  * Plugin URI: https://7eleven.ch/
  * Description: Plugin für interne Wettkampfausschreibungen und Anmeldungen
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: 7eleven
  * License: GPL v2 or later
  */
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 // Define plugin constants
 define('WETTKAMPF_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WETTKAMPF_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('WETTKAMPF_VERSION', '1.0.3');
+define('WETTKAMPF_VERSION', '1.0.4');
 
 // Include class files
 require_once WETTKAMPF_PLUGIN_PATH . 'includes/class-wettkampf-admin.php';
@@ -54,7 +54,6 @@ class WettkampfManager {
         
         // Enqueue scripts and styles
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_scripts'));
-        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
     }
     
     public function activate() {
@@ -205,7 +204,7 @@ class WettkampfManager {
     
     public function enqueue_frontend_scripts() {
         // Cache-busting version - increment when files change
-        $cache_version = WETTKAMPF_VERSION . '.4'; // .4 added for discipline functionality
+        $cache_version = WETTKAMPF_VERSION . '.5'; // .5 added for admin fixes
         
         wp_enqueue_script('wettkampf-frontend', WETTKAMPF_PLUGIN_URL . 'assets/frontend.js', array('jquery'), $cache_version, true);
         wp_enqueue_style('wettkampf-frontend', WETTKAMPF_PLUGIN_URL . 'assets/frontend.css', array(), $cache_version);
@@ -220,10 +219,6 @@ class WettkampfManager {
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('wettkampf_ajax')
         ));
-    }
-    
-    public function enqueue_admin_scripts() {
-        wp_enqueue_style('wettkampf-admin', WETTKAMPF_PLUGIN_URL . 'assets/admin.css', array(), WETTKAMPF_VERSION);
     }
 }
 
