@@ -207,6 +207,12 @@ class WettkampfFrontend {
                         <small style="color: #666; display: block; margin-top: 5px;">Bitte gib dein Geburtsjahr 4-stellig ein (z.B. 2010)</small>
                     </div>
                     
+                    <!-- Disziplinen werden dynamisch geladen - NEUE POSITION -->
+                    <div class="form-group" id="disziplinen_group" style="display: none;">
+                        <label>Disziplinen *</label>
+                        <div id="disziplinen_container"></div>
+                    </div>
+                    
                     <div class="form-group">
                         <label>Können deine Eltern fahren? *</label>
                         <div class="radio-group">
@@ -224,12 +230,6 @@ class WettkampfFrontend {
                     <div class="form-group" id="freie_plaetze_group" style="display: none;">
                         <label for="freie_plaetze">Anzahl freie Plätze</label>
                         <input type="number" id="freie_plaetze" name="freie_plaetze" min="0" max="10" placeholder="z.B. 2">
-                    </div>
-                    
-                    <!-- Disziplinen werden dynamisch geladen -->
-                    <div class="form-group" id="disziplinen_group" style="display: none;">
-                        <label>Disziplinen *</label>
-                        <div id="disziplinen_container"></div>
                     </div>
                     
                     <div class="form-group">
