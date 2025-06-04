@@ -47,7 +47,6 @@
 
 .wettkampf-card:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06) !important;
 }
 
 /* Header structure */
@@ -154,7 +153,7 @@
     overflow: hidden;
     transition: all 0.3s ease-in-out;
     border-radius: 5px;
-    margin-top: 20px;
+    margin-top: 0;
     position: relative;
     z-index: 2;
 }
@@ -221,7 +220,7 @@
     font-weight: 600;
     font-size: 16px;
     margin: 0;
-    padding: 10px 20px;
+    padding: 10px 20px !important;
     background: #fef2f2;
     border: 1px solid #fecaca;
     border-radius: 5px;
@@ -277,7 +276,7 @@
 }
 
 .edit-anmeldung {
-    background: #f59e0b;
+    background: #e5e5e5;
     border: none;
     cursor: pointer;
     font-size: 14px;
@@ -294,7 +293,7 @@
 }
 
 .view-anmeldung {
-    background: #6b7280;
+    background: #e5e5e5;
     border: none;
     cursor: pointer;
     font-size: 14px;
@@ -520,14 +519,13 @@
 .submit-button:hover {
     background: linear-gradient(135deg, #047857 0%, #065f46 100%);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
 }
 
 .cancel-button {
     background: #f3f4f6;
     color: #374151;
     border: 1px solid #d1d5db;
-    padding: 12px 24px;
+    padding: 6px 10px;
     border-radius: 5px;
     font-size: 16px;
     font-weight: 600;
@@ -555,7 +553,6 @@
 .delete-button:hover {
     background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
 }
 
 /* View modal specific styles */
