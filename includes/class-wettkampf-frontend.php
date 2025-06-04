@@ -127,14 +127,16 @@ class WettkampfFrontend {
                                     ?>
                                         <div class="teilnehmer-item">
                                             <span class="teilnehmer-name"><?php echo esc_html($anmeldung->vorname . ' ' . $anmeldung->name); ?></span>
-                                            <?php 
-                                            $anmeldeschluss_passed = strtotime($wettkampf->anmeldeschluss) < strtotime('today');
-                                            if (!$anmeldeschluss_passed): 
-                                            ?>
-                                                <button class="edit-anmeldung" data-anmeldung-id="<?php echo $anmeldung->id; ?>" title="Anmeldung bearbeiten">✏️</button>
-                                            <?php else: ?>
-                                                <button class="view-anmeldung" data-anmeldung-id="<?php echo $anmeldung->id; ?>" title="Anmeldung einsehen">🔍</button>
-                                            <?php endif; ?>
+                                            <div class="teilnehmer-actions">
+                                                <?php 
+                                                $anmeldeschluss_passed = strtotime($wettkampf->anmeldeschluss) < strtotime('today');
+                                                if (!$anmeldeschluss_passed): 
+                                                ?>
+                                                    <button class="edit-anmeldung" data-anmeldung-id="<?php echo $anmeldung->id; ?>" title="Anmeldung bearbeiten">✏️</button>
+                                                <?php else: ?>
+                                                    <button class="view-anmeldung" data-anmeldung-id="<?php echo $anmeldung->id; ?>" title="Anmeldung einsehen">🔍</button>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
