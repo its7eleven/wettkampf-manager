@@ -529,7 +529,7 @@ class WettkampfAdmin {
                         <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                            class="export-button csv">📊 CSV Export</a>
                         <a href="?page=wettkampf-anmeldungen&export=xlsx&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                           class="export-button xlsx">📋 XLSX Export</a>
+                           class="export-button xlsx">📋 Excel Export</a>
                         <?php if (!empty($wettkampf_filter)): ?>
                             <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                                class="export-button">📋 Teilnehmerliste</a>
@@ -685,32 +685,43 @@ class WettkampfAdmin {
         }
         
         // Set headers for Excel download
-        $filename = 'anmeldungen_' . date('Y-m-d') . '.xlsx';
+        $filename = 'anmeldungen_' . date('Y-m-d') . '.xls';
         if (!empty($wettkampf_id)) {
             $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT name FROM $table_wettkampf WHERE id = %d", $wettkampf_id));
             if ($wettkampf) {
-                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_anmeldungen_' . date('Y-m-d') . '.xlsx';
+                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_anmeldungen_' . date('Y-m-d') . '.xls';
             }
         }
         
-        // Prepare data array
-        $data = array();
+        // Set headers for Excel
+        header('Content-Type: application/vnd.ms-excel');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+        header('Expires: 0');
+        
+        // Start output
+        echo '<html>';
+        echo '<head>';
+        echo '<meta charset="UTF-8">';
+        echo '</head>';
+        echo '<body>';
+        echo '<table border="1">';
         
         // Headers
-        $data[] = array(
-            'Vorname',
-            'Name',
-            'E-Mail',
-            'Geschlecht',
-            'Jahrgang',
-            'Wettkampf',
-            'Wettkampf Datum',
-            'Wettkampf Ort',
-            'Eltern fahren',
-            'Freie Plätze',
-            'Disziplinen',
-            'Anmeldedatum'
-        );
+        echo '<tr style="background-color: #f2f2f2; font-weight: bold;">';
+        echo '<td>Vorname</td>';
+        echo '<td>Name</td>';
+        echo '<td>E-Mail</td>';
+        echo '<td>Geschlecht</td>';
+        echo '<td>Jahrgang</td>';
+        echo '<td>Wettkampf</td>';
+        echo '<td>Wettkampf Datum</td>';
+        echo '<td>Wettkampf Ort</td>';
+        echo '<td>Eltern fahren</td>';
+        echo '<td>Freie Plätze</td>';
+        echo '<td>Disziplinen</td>';
+        echo '<td>Anmeldedatum</td>';
+        echo '</tr>';
         
         // Data rows
         foreach ($anmeldungen as $anmeldung) {
@@ -732,59 +743,29 @@ class WettkampfAdmin {
                 }
             }
             
-            $data[] = array(
-                $anmeldung->vorname,
-                $anmeldung->name,
-                $anmeldung->email,
-                $anmeldung->geschlecht,
-                $anmeldung->jahrgang,
-                $anmeldung->wettkampf_name,
-                date('d.m.Y', strtotime($anmeldung->wettkampf_datum)),
-                $anmeldung->wettkampf_ort,
-                $anmeldung->eltern_fahren ? 'Ja' : 'Nein',
-                $anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '',
-                !empty($disziplin_names) ? implode(', ', $disziplin_names) : '',
-                date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum))
-            );
+            echo '<tr>';
+            echo '<td>' . htmlspecialchars($anmeldung->vorname, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->name, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->email, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->geschlecht, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->jahrgang, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_name, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . '</td>';
+            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_ort, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . ($anmeldung->eltern_fahren ? 'Ja' : 'Nein') . '</td>';
+            echo '<td>' . ($anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '') . '</td>';
+            echo '<td>' . htmlspecialchars(!empty($disziplin_names) ? implode(', ', $disziplin_names) : '', ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum)) . '</td>';
+            echo '</tr>';
         }
         
-        // Create simple Excel XML format
-        $this->create_excel_file($data, $filename);
+        echo '</table>';
+        echo '</body>';
+        echo '</html>';
+        
         exit;
     }
-    
-    // Create Excel file using simple XML format
-    private function create_excel_file($data, $filename) {
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
-        header('Expires: 0');
-        
-        // Simple Excel XML format
-        echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-        echo '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' . "\n";
-        echo '<Worksheet ss:Name="Anmeldungen">' . "\n";
-        echo '<Table>' . "\n";
-        
-        foreach ($data as $row_index => $row) {
-            echo '<Row>' . "\n";
-            foreach ($row as $cell) {
-                $cell_value = htmlspecialchars($cell, ENT_XML1, 'UTF-8');
-                if ($row_index === 0) {
-                    // Header row
-                    echo '<Cell><Data ss:Type="String"><![CDATA[' . $cell_value . ']]></Data></Cell>' . "\n";
-                } else {
-                    // Data row
-                    echo '<Cell><Data ss:Type="String"><![CDATA[' . $cell_value . ']]></Data></Cell>' . "\n";
-                }
-            }
-            echo '</Row>' . "\n";
-        }
-        
-        echo '</Table>' . "\n";
-        echo '</Worksheet>' . "\n";
-        echo '</Workbook>' . "\n";
-    }
+
     private function export_anmeldungen_csv($wettkampf_id = null) {
         global $wpdb;
         
