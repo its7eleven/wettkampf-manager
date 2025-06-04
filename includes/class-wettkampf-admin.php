@@ -427,6 +427,12 @@ class WettkampfAdmin {
             return;
         }
         
+        // Handle XLSX Export
+        if (isset($_GET['export']) && $_GET['export'] === 'xlsx' && wp_verify_nonce($_GET['_wpnonce'], 'export_anmeldungen')) {
+            $this->export_anmeldungen_xlsx(isset($_GET['wettkampf_id']) ? $_GET['wettkampf_id'] : null);
+            return;
+        }
+        
         $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
         $table_wettkampf = $wpdb->prefix . 'wettkampf';
         $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
@@ -522,6 +528,8 @@ class WettkampfAdmin {
                     <div class="export-buttons">
                         <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                            class="export-button csv">📊 CSV Export</a>
+                        <a href="?page=wettkampf-anmeldungen&export=xlsx&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
+                           class="export-button">📋 XLSX Export</a>
                         <?php if (!empty($wettkampf_filter)): ?>
                             <a href="?page=wettkampf-anmeldungen&export=csv&wettkampf_id=<?php echo $wettkampf_filter; ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                                class="export-button">📋 Teilnehmerliste</a>
@@ -640,7 +648,143 @@ class WettkampfAdmin {
         <?php
     }
     
-    // CSV Export function
+    // XLSX Export function
+    private function export_anmeldungen_xlsx($wettkampf_id = null) {
+        global $wpdb;
+        
+        $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
+        $table_wettkampf = $wpdb->prefix . 'wettkampf';
+        $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
+        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
+        
+        // Build query
+        $where_clause = '';
+        $params = array();
+        
+        if (!empty($wettkampf_id)) {
+            $where_clause = ' WHERE a.wettkampf_id = %d';
+            $params[] = $wettkampf_id;
+        }
+        
+        // Get data - use proper prepare statement
+        if (empty($params)) {
+            $anmeldungen = $wpdb->get_results("
+                SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
+                FROM $table_anmeldung a 
+                JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
+                ORDER BY w.datum ASC, a.anmeldedatum ASC
+            ");
+        } else {
+            $anmeldungen = $wpdb->get_results($wpdb->prepare("
+                SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
+                FROM $table_anmeldung a 
+                JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
+                $where_clause
+                ORDER BY w.datum ASC, a.anmeldedatum ASC
+            ", $params));
+        }
+        
+        // Set headers for Excel download
+        $filename = 'anmeldungen_' . date('Y-m-d') . '.xlsx';
+        if (!empty($wettkampf_id)) {
+            $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT name FROM $table_wettkampf WHERE id = %d", $wettkampf_id));
+            if ($wettkampf) {
+                $filename = sanitize_file_name(strtolower(str_replace(' ', '_', $wettkampf->name))) . '_anmeldungen_' . date('Y-m-d') . '.xlsx';
+            }
+        }
+        
+        // Prepare data array
+        $data = array();
+        
+        // Headers
+        $data[] = array(
+            'Vorname',
+            'Name',
+            'E-Mail',
+            'Geschlecht',
+            'Jahrgang',
+            'Wettkampf',
+            'Wettkampf Datum',
+            'Wettkampf Ort',
+            'Eltern fahren',
+            'Freie Plätze',
+            'Disziplinen',
+            'Anmeldedatum'
+        );
+        
+        // Data rows
+        foreach ($anmeldungen as $anmeldung) {
+            // Load disciplines
+            $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
+                SELECT d.name 
+                FROM $table_anmeldung_disziplinen ad 
+                JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
+                WHERE ad.anmeldung_id = %d 
+                ORDER BY d.sortierung ASC, d.name ASC
+            ", $anmeldung->id));
+            
+            $disziplin_names = array();
+            if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
+                foreach ($anmeldung_disziplinen as $d) {
+                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
+                        $disziplin_names[] = $d->name;
+                    }
+                }
+            }
+            
+            $data[] = array(
+                $anmeldung->vorname,
+                $anmeldung->name,
+                $anmeldung->email,
+                $anmeldung->geschlecht,
+                $anmeldung->jahrgang,
+                $anmeldung->wettkampf_name,
+                date('d.m.Y', strtotime($anmeldung->wettkampf_datum)),
+                $anmeldung->wettkampf_ort,
+                $anmeldung->eltern_fahren ? 'Ja' : 'Nein',
+                $anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '',
+                !empty($disziplin_names) ? implode(', ', $disziplin_names) : '',
+                date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum))
+            );
+        }
+        
+        // Create simple Excel XML format
+        $this->create_excel_file($data, $filename);
+        exit;
+    }
+    
+    // Create Excel file using simple XML format
+    private function create_excel_file($data, $filename) {
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+        header('Expires: 0');
+        
+        // Simple Excel XML format
+        echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        echo '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' . "\n";
+        echo '<Worksheet ss:Name="Anmeldungen">' . "\n";
+        echo '<Table>' . "\n";
+        
+        foreach ($data as $row_index => $row) {
+            echo '<Row>' . "\n";
+            foreach ($row as $cell) {
+                $cell_value = htmlspecialchars($cell, ENT_XML1, 'UTF-8');
+                if ($row_index === 0) {
+                    // Header row
+                    echo '<Cell><Data ss:Type="String"><![CDATA[' . $cell_value . ']]></Data></Cell>' . "\n";
+                } else {
+                    // Data row
+                    echo '<Cell><Data ss:Type="String"><![CDATA[' . $cell_value . ']]></Data></Cell>' . "\n";
+                }
+            }
+            echo '</Row>' . "\n";
+        }
+        
+        echo '</Table>' . "\n";
+        echo '</Worksheet>' . "\n";
+        echo '</Workbook>' . "\n";
+    }
     private function export_anmeldungen_csv($wettkampf_id = null) {
         global $wpdb;
         
