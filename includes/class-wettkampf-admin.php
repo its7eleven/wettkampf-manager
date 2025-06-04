@@ -109,6 +109,25 @@ class WettkampfAdmin {
         <div class="wrap">
             <h1>Wettkampf Manager <a href="?page=wettkampf-new" class="page-title-action">Neuer Wettkampf</a></h1>
             
+<!-- WordPress-style Filter Tabs -->
+<ul class="subsubsub">
+    <li class="all">
+        <a href="?page=wettkampf-manager&filter=all" class="current">
+            Alle <span class="count">(15)</span>
+        </a> |
+    </li>
+    <li class="active">
+        <a href="?page=wettkampf-manager&filter=active">
+            Aktive <span class="count">(8)</span>
+        </a> |
+    </li>
+    <li class="inactive">
+        <a href="?page=wettkampf-manager&filter=inactive">
+            Vergangene <span class="count">(7)</span>
+        </a>
+    </li>
+</ul>
+
             <table class="wp-list-table widefat fixed striped">
                 <thead>
                     <tr>
@@ -796,11 +815,9 @@ class WettkampfAdmin {
                                     <?php echo date('d.m.Y H:i', strtotime($anmeldung->anmeldedatum)); ?>
                                 </td>
                                 <td>
-                                    <a href="?page=wettkampf-anmeldungen&edit=<?php echo $anmeldung->id; ?>" 
-                                       style="color: #2271b1;" title="Bearbeiten">✏️</a> |
+                                    <a href="?page=wettkampf-anmeldungen&edit=<?php echo $anmeldung->id; ?> title="Bearbeiten">Bearbeiten</a> |
                                     <a href="?page=wettkampf-anmeldungen&delete=<?php echo $anmeldung->id; ?>&_wpnonce=<?php echo wp_create_nonce('delete_anmeldung'); ?>" 
-                                       onclick="return confirm('Anmeldung wirklich löschen?')" 
-                                       style="color: #d63638;" title="Löschen">🗑️</a>
+                                       onclick="return confirm('Anmeldung wirklich löschen?') title="Löschen">Löschen</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
