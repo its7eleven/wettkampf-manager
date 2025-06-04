@@ -1,10 +1,10 @@
 <?php
 /**
  * Plugin Name: Wettkampf Manager
- * Plugin URI: https://example.com
+ * Plugin URI: https://7eleven.ch/
  * Description: Plugin für interne Wettkampfausschreibungen und Anmeldungen
  * Version: 1.0.3
- * Author: Ihr Name
+ * Author: 7eleven
  * License: GPL v2 or later
  */
 
