@@ -47,7 +47,7 @@
 
 .wettkampf-card:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06) !important;
+    
 }
 
 /* Header structure */
@@ -211,7 +211,7 @@
 .anmelde-button:hover {
     background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+   
     color: white;
     text-decoration: none;
 }
@@ -269,7 +269,7 @@
 
 .teilnehmer-item:hover {
     border-color: #3b82f6;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+   
 }
 
 .teilnehmer-name {
@@ -290,7 +290,7 @@
 }
 
 .edit-anmeldung {
-    background: #f59e0b;
+    background: #dddddd;
     border: none;
     cursor: pointer;
     font-size: 12px;
@@ -312,7 +312,7 @@
 }
 
 .view-anmeldung {
-    background: #6b7280;
+    background: #dddddd;
     border: none;
     cursor: pointer;
     font-size: 12px;
@@ -543,7 +543,7 @@
 .submit-button:hover {
     background: linear-gradient(135deg, #047857 0%, #065f46 100%);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+  
 }
 
 .cancel-button {
@@ -578,7 +578,7 @@
 .delete-button:hover {
     background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+  
 }
 
 /* View modal specific styles */
