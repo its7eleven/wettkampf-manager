@@ -3,7 +3,7 @@
  * Plugin Name: Wettkampf Manager
  * Plugin URI: https://7eleven.ch/
  * Description: Plugin für interne Wettkampfausschreibungen und Anmeldungen
- * Version: 1.0.4
+ * Version: 1.0.5
  * Author: 7eleven
  * License: GPL v2 or later
  */
@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) {
 // Define plugin constants
 define('WETTKAMPF_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WETTKAMPF_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('WETTKAMPF_VERSION', '1.0.4');
+define('WETTKAMPF_VERSION', '1.0.5');
 
 // Include class files
 require_once WETTKAMPF_PLUGIN_PATH . 'includes/class-wettkampf-admin.php';
@@ -85,7 +85,9 @@ class WettkampfManager {
             lizenziert tinyint(1) DEFAULT 0,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id)
+            PRIMARY KEY (id),
+            INDEX idx_datum (datum),
+            INDEX idx_anmeldeschluss (anmeldeschluss)
         ) $charset_collate;";
         
         // Disziplinen Tabelle
@@ -97,7 +99,9 @@ class WettkampfManager {
             aktiv tinyint(1) DEFAULT 1,
             sortierung int DEFAULT 0,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (id)
+            PRIMARY KEY (id),
+            INDEX idx_aktiv (aktiv),
+            INDEX idx_sortierung (sortierung)
         ) $charset_collate;";
         
         // Wettkampf-Disziplinen Zuordnung
@@ -108,7 +112,9 @@ class WettkampfManager {
             disziplin_id mediumint(9) NOT NULL,
             PRIMARY KEY (id),
             INDEX idx_wettkampf_id (wettkampf_id),
-            INDEX idx_disziplin_id (disziplin_id)
+            INDEX idx_disziplin_id (disziplin_id),
+            FOREIGN KEY (wettkampf_id) REFERENCES $table_wettkampf(id) ON DELETE CASCADE,
+            FOREIGN KEY (disziplin_id) REFERENCES $table_disziplinen(id) ON DELETE CASCADE
         ) $charset_collate;";
         
         // Anmeldungen Tabelle
@@ -127,7 +133,9 @@ class WettkampfManager {
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             INDEX idx_wettkampf_id (wettkampf_id),
-            INDEX idx_email (email)
+            INDEX idx_email (email),
+            INDEX idx_anmeldedatum (anmeldedatum),
+            FOREIGN KEY (wettkampf_id) REFERENCES $table_wettkampf(id) ON DELETE CASCADE
         ) $charset_collate;";
         
         // Anmeldung-Disziplinen Zuordnung
@@ -138,7 +146,9 @@ class WettkampfManager {
             disziplin_id mediumint(9) NOT NULL,
             PRIMARY KEY (id),
             INDEX idx_anmeldung_id (anmeldung_id),
-            INDEX idx_disziplin_id (disziplin_id)
+            INDEX idx_disziplin_id (disziplin_id),
+            FOREIGN KEY (anmeldung_id) REFERENCES $table_anmeldung(id) ON DELETE CASCADE,
+            FOREIGN KEY (disziplin_id) REFERENCES $table_disziplinen(id) ON DELETE CASCADE
         ) $charset_collate;";
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
@@ -204,7 +214,7 @@ class WettkampfManager {
     
     public function enqueue_frontend_scripts() {
         // Cache-busting version - increment when files change
-        $cache_version = WETTKAMPF_VERSION . '.5'; // .5 added for admin fixes
+        $cache_version = WETTKAMPF_VERSION . '.6'; // .6 added for cascade deletion fixes
         
         wp_enqueue_script('wettkampf-frontend', WETTKAMPF_PLUGIN_URL . 'assets/frontend.js', array('jquery'), $cache_version, true);
         wp_enqueue_style('wettkampf-frontend', WETTKAMPF_PLUGIN_URL . 'assets/frontend.css', array(), $cache_version);
