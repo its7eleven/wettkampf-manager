@@ -408,6 +408,18 @@ class WettkampfAdmin {
     public function admin_anmeldungen() {
         global $wpdb;
         
+        // Handle CSV Export - MOVED TO TOP BEFORE ANY OUTPUT
+        if (isset($_GET['export']) && $_GET['export'] === 'csv' && wp_verify_nonce($_GET['_wpnonce'], 'export_anmeldungen')) {
+            $this->export_anmeldungen_csv(isset($_GET['wettkampf_id']) ? $_GET['wettkampf_id'] : null);
+            exit; // Important: exit immediately after export
+        }
+        
+        // Handle XLSX Export - MOVED TO TOP BEFORE ANY OUTPUT
+        if (isset($_GET['export']) && $_GET['export'] === 'xlsx' && wp_verify_nonce($_GET['_wpnonce'], 'export_anmeldungen')) {
+            $this->export_anmeldungen_xlsx(isset($_GET['wettkampf_id']) ? $_GET['wettkampf_id'] : null);
+            exit; // Important: exit immediately after export
+        }
+        
         // Handle delete action
         if (isset($_GET['delete']) && wp_verify_nonce($_GET['_wpnonce'], 'delete_anmeldung')) {
             $id = intval($_GET['delete']);
@@ -419,18 +431,6 @@ class WettkampfAdmin {
             // Dann Anmeldung löschen
             $wpdb->delete($wpdb->prefix . 'wettkampf_anmeldung', array('id' => $id));
             echo '<div class="notice notice-success"><p>Anmeldung gelöscht!</p></div>';
-        }
-        
-        // Handle CSV Export
-        if (isset($_GET['export']) && $_GET['export'] === 'csv' && wp_verify_nonce($_GET['_wpnonce'], 'export_anmeldungen')) {
-            $this->export_anmeldungen_csv(isset($_GET['wettkampf_id']) ? $_GET['wettkampf_id'] : null);
-            return;
-        }
-        
-        // Handle XLSX Export
-        if (isset($_GET['export']) && $_GET['export'] === 'xlsx' && wp_verify_nonce($_GET['_wpnonce'], 'export_anmeldungen')) {
-            $this->export_anmeldungen_xlsx(isset($_GET['wettkampf_id']) ? $_GET['wettkampf_id'] : null);
-            return;
         }
         
         $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
