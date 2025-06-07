@@ -82,6 +82,15 @@ class WettkampfAdmin {
             'wettkampf-settings',
             array($this, 'admin_settings')
         );
+        
+        add_submenu_page(
+            'wettkampf-manager',
+            'Auto-Export Status',
+            'Auto-Export Status',
+            'manage_options',
+            'wettkampf-export-status',
+            array($this, 'admin_export_status')
+        );
     }
     
     public function admin_page() {
@@ -208,6 +217,132 @@ class WettkampfAdmin {
                     <?php endforeach; ?>
                 </tbody>
             </table>
+        </div>
+        <?php
+    }
+    
+    public function admin_export_status() {
+        global $wpdb;
+        
+        // Handle manual test
+        if (isset($_POST['test_export']) && wp_verify_nonce($_POST['test_nonce'], 'test_export')) {
+            $wettkampf_id = intval($_POST['wettkampf_id']);
+            
+            // Get competition
+            $table_wettkampf = $wpdb->prefix . 'wettkampf';
+            $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_wettkampf WHERE id = %d", $wettkampf_id));
+            
+            if ($wettkampf) {
+                // Create WettkampfManager instance to access private method
+                $manager = new WettkampfManager();
+                $manager->send_automatic_export($wettkampf);
+                echo '<div class="notice notice-success"><p>Test-Export für "' . esc_html($wettkampf->name) . '" wurde versendet!</p></div>';
+            }
+        }
+        
+        $table_wettkampf = $wpdb->prefix . 'wettkampf';
+        $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
+        
+        // Get competitions with their export status
+        $competitions = $wpdb->get_results("
+            SELECT w.*, COUNT(a.id) as anmeldungen_count,
+                   CASE WHEN o.option_value IS NOT NULL THEN o.option_value ELSE NULL END as export_sent_date
+            FROM $table_wettkampf w 
+            LEFT JOIN $table_anmeldung a ON w.id = a.wettkampf_id 
+            LEFT JOIN {$wpdb->prefix}options o ON o.option_name = CONCAT('wettkampf_export_sent_', w.id)
+            WHERE w.anmeldeschluss <= CURDATE()
+            GROUP BY w.id 
+            ORDER BY w.datum DESC
+        ");
+        
+        $export_email = get_option('wettkampf_export_email', '');
+        
+        ?>
+        <div class="wrap">
+            <h1>Auto-Export Status</h1>
+            
+            <?php if (empty($export_email)): ?>
+                <div class="notice notice-warning">
+                    <p><strong>⚠️ Warnung:</strong> Keine E-Mail-Adresse für automatische Exports konfiguriert. 
+                    <a href="?page=wettkampf-settings">Jetzt konfigurieren</a></p>
+                </div>
+            <?php else: ?>
+                <div class="notice notice-success">
+                    <p><strong>✅ Auto-Export aktiviert</strong> für: <?php echo esc_html($export_email); ?></p>
+                </div>
+            <?php endif; ?>
+            
+            <h2>Wettkämpfe mit abgelaufener Anmeldefrist</h2>
+            
+            <?php if (empty($competitions)): ?>
+                <p>Keine Wettkämpfe mit abgelaufener Anmeldefrist gefunden.</p>
+            <?php else: ?>
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th>Wettkampf</th>
+                            <th>Datum</th>
+                            <th>Anmeldeschluss</th>
+                            <th>Anmeldungen</th>
+                            <th>Export Status</th>
+                            <th>Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($competitions as $comp): ?>
+                        <tr>
+                            <td><strong><?php echo esc_html($comp->name); ?></strong></td>
+                            <td><?php echo date('d.m.Y', strtotime($comp->datum)); ?></td>
+                            <td><?php echo date('d.m.Y', strtotime($comp->anmeldeschluss)); ?></td>
+                            <td><?php echo $comp->anmeldungen_count; ?></td>
+                            <td>
+                                <?php if ($comp->export_sent_date): ?>
+                                    <span style="color: #46b450;">✅ Gesendet</span><br>
+                                    <small><?php echo date('d.m.Y H:i', strtotime($comp->export_sent_date)); ?></small>
+                                <?php elseif ($comp->anmeldungen_count > 0): ?>
+                                    <span style="color: #dc3232;">⏳ Ausstehend</span>
+                                <?php else: ?>
+                                    <span style="color: #666;">➖ Keine Anmeldungen</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php if ($comp->anmeldungen_count > 0 && !empty($export_email)): ?>
+                                    <form method="post" style="display: inline;">
+                                        <input type="hidden" name="wettkampf_id" value="<?php echo $comp->id; ?>">
+                                        <?php wp_nonce_field('test_export', 'test_nonce'); ?>
+                                        <button type="submit" name="test_export" class="button button-small" 
+                                                onclick="return confirm('Test-Export für &quot;<?php echo esc_js($comp->name); ?>&quot; senden?')">
+                                            📧 Test-Export
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                                <a href="?page=wettkampf-anmeldungen&wettkampf_id=<?php echo $comp->id; ?>" class="button button-small">
+                                    📋 Anmeldungen
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+            
+            <div style="margin-top: 30px; padding: 20px; background: #f9f9f9; border-radius: 4px;">
+                <h3>ℹ️ Informationen zum Auto-Export</h3>
+                <ul>
+                    <li><strong>Zeitpunkt:</strong> 2 Stunden nach Mitternacht des Anmeldeschlusstages (02:00 Uhr)</li>
+                    <li><strong>Bedingung:</strong> Nur Wettkämpfe mit mindestens einer Anmeldung</li>
+                    <li><strong>Häufigkeit:</strong> Pro Wettkampf wird nur einmal ein Export versendet</li>
+                    <li><strong>Test:</strong> Mit "Test-Export" können Sie manuell einen Export senden</li>
+                </ul>
+                
+                <?php
+                $next_cron = wp_next_scheduled('wettkampf_check_expired_registrations');
+                if ($next_cron):
+                ?>
+                <p><strong>Nächste automatische Prüfung:</strong> 
+                   <?php echo date('d.m.Y H:i:s', $next_cron + (get_option('gmt_offset') * HOUR_IN_SECONDS)); ?> Uhr</p>
+                <?php endif; ?>
+            </div>
         </div>
         <?php
     }
@@ -1104,6 +1239,7 @@ class WettkampfAdmin {
             update_option('wettkampf_recaptcha_secret_key', sanitize_text_field($_POST['recaptcha_secret_key']));
             update_option('wettkampf_sender_email', sanitize_email($_POST['sender_email']));
             update_option('wettkampf_sender_name', sanitize_text_field($_POST['sender_name']));
+            update_option('wettkampf_export_email', sanitize_email($_POST['export_email']));
             
             echo '<div class="notice notice-success"><p>Einstellungen gespeichert!</p></div>';
         }
@@ -1112,6 +1248,7 @@ class WettkampfAdmin {
         $recaptcha_secret_key = get_option('wettkampf_recaptcha_secret_key', '');
         $sender_email = get_option('wettkampf_sender_email', get_option('admin_email'));
         $sender_name = get_option('wettkampf_sender_name', get_option('blogname'));
+        $export_email = get_option('wettkampf_export_email', '');
         
         ?>
         <div class="wrap">
@@ -1135,12 +1272,26 @@ class WettkampfAdmin {
                         <th><label for="sender_email">Absender E-Mail</label></th>
                         <td>
                             <input type="email" id="sender_email" name="sender_email" value="<?php echo esc_attr($sender_email); ?>" class="regular-text">
+                            <p class="description">E-Mail-Adresse für ausgehende Nachrichten (Bestätigungen, etc.)</p>
                         </td>
                     </tr>
                     <tr>
                         <th><label for="sender_name">Absender Name</label></th>
                         <td>
                             <input type="text" id="sender_name" name="sender_name" value="<?php echo esc_attr($sender_name); ?>" class="regular-text">
+                            <p class="description">Name für ausgehende Nachrichten</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="export_email">Automatischer Export E-Mail</label></th>
+                        <td>
+                            <input type="email" id="export_email" name="export_email" value="<?php echo esc_attr($export_email); ?>" class="regular-text">
+                            <p class="description">E-Mail-Adresse für automatische Excel-Exporte nach Anmeldeschluss (2 Stunden nach Mitternacht)</p>
+                            <?php if (!empty($export_email)): ?>
+                                <p style="color: #46b450; font-weight: 500;">✓ Automatische Exports sind aktiviert</p>
+                            <?php else: ?>
+                                <p style="color: #dc3232; font-weight: 500;">⚠ Automatische Exports sind deaktiviert (keine E-Mail-Adresse hinterlegt)</p>
+                            <?php endif; ?>
                         </td>
                     </tr>
                 </table>
@@ -1149,6 +1300,33 @@ class WettkampfAdmin {
                     <input type="submit" name="submit" class="button-primary" value="Einstellungen speichern">
                 </p>
             </form>
+            
+            <!-- Informationsbox für Cron-Jobs -->
+            <div style="margin-top: 30px; padding: 20px; background: #f0f6fc; border-left: 4px solid #2271b1; border-radius: 4px;">
+                <h3>🤖 Automatische Excel-Exports</h3>
+                <p><strong>Funktionsweise:</strong></p>
+                <ul>
+                    <li>Das System prüft stündlich, ob Anmeldefristen abgelaufen sind</li>
+                    <li>2 Stunden nach Mitternacht des Anmeldeschlusstages wird automatisch ein Excel-Export generiert</li>
+                    <li>Der Export wird an die oben konfigurierte E-Mail-Adresse gesendet</li>
+                    <li>Pro Wettkampf wird nur einmal ein automatischer Export versendet</li>
+                </ul>
+                
+                <p><strong>Technische Details:</strong></p>
+                <ul>
+                    <li>WordPress Cron-Job läuft stündlich</li>
+                    <li>Export-Zeitfenster: 02:00 - 03:00 Uhr</li>
+                    <li>Nur Wettkämpfe mit Anmeldungen werden exportiert</li>
+                </ul>
+                
+                <?php
+                // Show next scheduled cron run
+                $next_cron = wp_next_scheduled('wettkampf_check_expired_registrations');
+                if ($next_cron):
+                ?>
+                <p><strong>Nächste Prüfung:</strong> <?php echo date('d.m.Y H:i:s', $next_cron + (get_option('gmt_offset') * HOUR_IN_SECONDS)); ?> Uhr</p>
+                <?php endif; ?>
+            </div>
         </div>
         <?php
     }
