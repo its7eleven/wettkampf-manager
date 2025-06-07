@@ -99,7 +99,7 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // Toggle Disziplinen für Teilnehmer
+    // FIXED: Toggle Disziplinen für Teilnehmer - bessere Event-Delegation
     $(document).on('click', '.show-disziplinen-button', function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -109,11 +109,21 @@ jQuery(document).ready(function($) {
         const button = $(this);
         
         console.log('Disziplinen toggle clicked for anmeldung:', anmeldungId);
+        console.log('Button element:', button);
+        console.log('Disziplinen div found:', disziplinenDiv.length);
+        console.log('Current visibility:', disziplinenDiv.is(':visible'));
+        
+        // Fallback falls das Disziplinen-Div nicht gefunden wird
+        if (disziplinenDiv.length === 0) {
+            console.warn('Disziplinen div not found for anmeldung:', anmeldungId);
+            return;
+        }
         
         if (disziplinenDiv.is(':visible')) {
             disziplinenDiv.slideUp(200);
             button.text('📋');
             button.attr('title', 'Disziplinen anzeigen');
+            console.log('Hiding disziplinen for:', anmeldungId);
         } else {
             // Erst alle anderen schließen
             $('.teilnehmer-disziplinen:visible').slideUp(200);
@@ -123,6 +133,38 @@ jQuery(document).ready(function($) {
             disziplinenDiv.slideDown(200);
             button.text('📋');
             button.attr('title', 'Disziplinen ausblenden');
+            console.log('Showing disziplinen for:', anmeldungId);
+        }
+    });
+    
+    // ZUSÄTZLICHER FIX: Alternative Event-Handler für Desktop-spezifische Issues
+    $(document).on('mousedown touchstart', '.show-disziplinen-button', function(e) {
+        // Backup handler für den Fall dass click nicht funktioniert
+        const originalHandler = $(this).data('backup-handler-executed');
+        if (originalHandler) {
+            return; // Verhindere doppelte Ausführung
+        }
+        
+        $(this).data('backup-handler-executed', true);
+        
+        // Reset nach kurzer Zeit
+        setTimeout(() => {
+            $(this).removeData('backup-handler-executed');
+        }, 500);
+        
+        // Trigger den ursprünglichen Handler
+        $(this).trigger('click');
+    });
+    
+    // DEBUG: Event-Handler für alle Clicks auf Teilnehmer-Items
+    $(document).on('click', '.teilnehmer-item', function(e) {
+        console.log('Click on teilnehmer-item detected');
+        console.log('Target element:', e.target);
+        console.log('Has show-disziplinen-button class:', $(e.target).hasClass('show-disziplinen-button'));
+        
+        // Prüfe ob der Klick auf das Disziplinen-Button war
+        if ($(e.target).hasClass('show-disziplinen-button')) {
+            console.log('Click was on disziplinen button');
         }
     });
     
@@ -930,5 +972,5 @@ jQuery(document).ready(function($) {
         }, 100);
     });
     
-    console.log('Wettkampf Frontend JS with corrected Categories (U10, U12, U14, U16, U18) loaded successfully');
+    console.log('Wettkampf Frontend JS with FIXED Disziplinen Toggle and corrected Categories (U10, U12, U14, U16, U18) loaded successfully');
 });

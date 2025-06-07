@@ -1,4 +1,4 @@
-/* Wettkampf Manager Frontend Styles - Modals Fixed */
+/* Wettkampf Manager Frontend Styles - Modals Fixed + Disziplinen Toggle Fixed */
 
 /* Basic container styling with moderate specificity */
 .wettkampf-liste {
@@ -265,11 +265,20 @@
     border: 1px solid #e5e7eb;
     transition: all 0.15s ease-in-out;
     min-height: 36px;
+    position: relative; /* WICHTIG für z-index */
 }
 
 .teilnehmer-item:hover {
     border-color: #3b82f6;
    
+}
+
+.teilnehmer-info {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    margin-right: 10px;
+    min-width: 0; /* Wichtig für text-overflow */
 }
 
 .teilnehmer-name {
@@ -287,50 +296,154 @@
     display: flex;
     gap: 4px;
     flex-shrink: 0;
+    align-items: center; /* WICHTIG für Alignment */
+    z-index: 10; /* WICHTIG: Höher als Parent-Element */
+    position: relative; /* WICHTIG für z-index */
+}
+
+/* FIXED: Disziplinen Button Styling - Bessere Klickbarkeit */
+.show-disziplinen-button {
+    background: #e5e7eb !important;
+    border: 1px solid #d1d5db !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    padding: 6px 8px !important;
+    border-radius: 4px !important;
+    transition: all 0.15s ease-in-out !important;
+    color: #374151 !important;
+    font-weight: 500 !important;
+    min-width: 28px !important;
+    height: 28px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-decoration: none !important;
+    outline: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    /* WICHTIG: Stelle sicher dass Button klickbar ist */
+    pointer-events: auto !important;
+    z-index: 20 !important;
+    position: relative !important;
+    /* Verhindere Überlagerung durch andere Elemente */
+    isolation: isolate !important;
+}
+
+.show-disziplinen-button:hover {
+    background: #6b7280 !important;
+    color: white !important;
+    border-color: #6b7280 !important;
+    transform: scale(1.1) !important;
+    z-index: 25 !important;
+}
+
+.show-disziplinen-button:active {
+    transform: scale(0.95) !important;
+    background: #4b5563 !important;
+}
+
+.show-disziplinen-button:focus {
+    outline: 2px solid #3b82f6 !important;
+    outline-offset: 2px !important;
 }
 
 .edit-anmeldung {
-    background: #dddddd;
-    border: none;
-    cursor: pointer;
-    font-size: 12px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: all 0.15s ease-in-out;
-    color: white;
-    font-weight: 500;
-    min-width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: #f59e0b !important;
+    border: 1px solid #d97706 !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    padding: 6px 8px !important;
+    border-radius: 4px !important;
+    transition: all 0.15s ease-in-out !important;
+    color: white !important;
+    font-weight: 500 !important;
+    min-width: 28px !important;
+    height: 28px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-decoration: none !important;
+    outline: none !important;
+    /* WICHTIG: Stelle sicher dass Button klickbar ist */
+    pointer-events: auto !important;
+    z-index: 20 !important;
+    position: relative !important;
 }
 
 .edit-anmeldung:hover {
-    background: #d97706;
-    transform: scale(1.1);
+    background: #d97706 !important;
+    border-color: #b45309 !important;
+    transform: scale(1.1) !important;
+    color: white !important;
+    text-decoration: none !important;
 }
 
 .view-anmeldung {
-    background: #dddddd;
-    border: none;
-    cursor: pointer;
-    font-size: 12px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: all 0.15s ease-in-out;
-    color: white;
-    font-weight: 500;
-    min-width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: #6b7280 !important;
+    border: 1px solid #4b5563 !important;
+    cursor: pointer !important;
+    font-size: 12px !important;
+    padding: 6px 8px !important;
+    border-radius: 4px !important;
+    transition: all 0.15s ease-in-out !important;
+    color: white !important;
+    font-weight: 500 !important;
+    min-width: 28px !important;
+    height: 28px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-decoration: none !important;
+    outline: none !important;
+    /* WICHTIG: Stelle sicher dass Button klickbar ist */
+    pointer-events: auto !important;
+    z-index: 20 !important;
+    position: relative !important;
 }
 
 .view-anmeldung:hover {
-    background: #4b5563;
-    transform: scale(1.1);
+    background: #4b5563 !important;
+    border-color: #374151 !important;
+    transform: scale(1.1) !important;
+    color: white !important;
+    text-decoration: none !important;
+}
+
+/* FIXED: Disziplinen Display - Bessere Sichtbarkeit */
+.teilnehmer-disziplinen {
+    display: none;
+    margin-left: 20px;
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border-radius: 6px;
+    border-left: 3px solid #3b82f6;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    /* WICHTIG: Z-Index für korrekte Layering */
+    z-index: 5;
+    position: relative;
+    animation: slideDown 0.2s ease-in-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.teilnehmer-disziplinen small {
+    color: #374151 !important;
+    font-weight: 500 !important;
+    font-size: 13px !important;
+    line-height: 1.4 !important;
 }
 
 /* Radio button styling */
@@ -656,6 +769,47 @@
     100% { transform: rotate(360deg); }
 }
 
+/* ZUSÄTZLICHE FIXES für Desktop-Klickbarkeit */
+
+/* Stelle sicher dass keine Pseudo-Elemente die Buttons überlagern */
+.teilnehmer-item::before,
+.teilnehmer-item::after,
+.teilnehmer-actions::before,
+.teilnehmer-actions::after,
+.show-disziplinen-button::before,
+.show-disziplinen-button::after {
+    pointer-events: none !important;
+}
+
+/* Verhindere Event-Konflikte mit Parent-Elementen */
+.teilnehmer-actions button,
+.teilnehmer-actions .show-disziplinen-button,
+.teilnehmer-actions .edit-anmeldung,
+.teilnehmer-actions .view-anmeldung {
+    /* Explizit isolation für bessere Event-Behandlung */
+    isolation: isolate !important;
+    /* Verhindere Interferenz mit flexbox */
+    flex-shrink: 0 !important;
+    /* Explizite Größe für bessere Klickbarkeit */
+    min-width: 28px !important;
+    min-height: 28px !important;
+}
+
+/* Hover-Effekt für bessere UX */
+.teilnehmer-item:hover .teilnehmer-actions button {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Focus-Styles für Accessibility */
+.show-disziplinen-button:focus-visible,
+.edit-anmeldung:focus-visible,
+.view-anmeldung:focus-visible {
+    outline: 2px solid #3b82f6 !important;
+    outline-offset: 2px !important;
+    z-index: 30 !important;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .wettkampf-liste {
@@ -730,6 +884,15 @@
     .radio-label {
         padding: 14px 18px;
     }
+    
+    /* Mobile: Größere Touch-Targets für Buttons */
+    .show-disziplinen-button,
+    .edit-anmeldung,
+    .view-anmeldung {
+        min-width: 32px !important;
+        min-height: 32px !important;
+        font-size: 14px !important;
+    }
 }
 
 @media (max-width: 480px) {
@@ -785,11 +948,12 @@
         gap: 4px !important;
     }
     
+    .show-disziplinen-button,
     .edit-anmeldung,
     .view-anmeldung {
-        min-width: 28px;
-        height: 28px;
-        font-size: 14px;
+        min-width: 30px !important;
+        height: 30px !important;
+        font-size: 14px !important;
     }
     
     .info-grid {
@@ -806,6 +970,45 @@
         padding-left: 10px;
         border-left: 3px solid #e5e7eb;
     }
+    
+    /* Mobile: Disziplinen-Display anpassen */
+    .teilnehmer-disziplinen {
+        margin-left: 10px;
+        margin-top: 10px;
+        padding: 12px;
+        font-size: 12px;
+    }
+}
+
+/* High DPI Display Fixes */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .show-disziplinen-button,
+    .edit-anmeldung,
+    .view-anmeldung {
+        /* Bessere Sichtbarkeit auf High-DPI Displays */
+        border-width: 1px !important;
+    }
+}
+
+/* Dark Mode Support (falls Theme es unterstützt) */
+@media (prefers-color-scheme: dark) {
+    .teilnehmer-disziplinen {
+        background: #1f2937;
+        border-color: #374151;
+        color: #e5e7eb;
+    }
+    
+    .show-disziplinen-button {
+        background: #374151 !important;
+        border-color: #4b5563 !important;
+        color: #e5e7eb !important;
+    }
+    
+    .show-disziplinen-button:hover {
+        background: #4b5563 !important;
+        border-color: #6b7280 !important;
+        color: #f9fafb !important;
+    }
 }
 
 /* Print styles */
@@ -817,8 +1020,14 @@
     .anmelde-button,
     .edit-anmeldung,
     .view-anmeldung,
+    .show-disziplinen-button,
     .details-toggle {
         display: none !important;
+    }
+    
+    .teilnehmer-disziplinen {
+        display: block !important;
+        break-inside: avoid;
     }
     
     .wettkampf-card {
