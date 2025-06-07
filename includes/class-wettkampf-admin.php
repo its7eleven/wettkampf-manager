@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin functionality for Wettkampf Manager
+ * Admin functionality for Wettkampf Manager with Categories
  */
 
 // Prevent direct access
@@ -105,28 +105,43 @@ class WettkampfAdmin {
             ORDER BY w.datum DESC
         ");
         
+        // Get current filter
+        $current_filter = isset($_GET['filter']) ? sanitize_text_field($_GET['filter']) : 'all';
+
+        // Calculate counts
+        $alle_count = count($wettkaempfe);
+        $aktive_count = count(array_filter($wettkaempfe, function($w) { return strtotime($w->datum) >= strtotime('today'); }));
+        $vergangene_count = count(array_filter($wettkaempfe, function($w) { return strtotime($w->datum) < strtotime('today'); }));
+
+        // Filter wettkämpfe based on selection
+        if ($current_filter === 'active') {
+            $wettkaempfe = array_filter($wettkaempfe, function($w) { return strtotime($w->datum) >= strtotime('today'); });
+        } elseif ($current_filter === 'inactive') {
+            $wettkaempfe = array_filter($wettkaempfe, function($w) { return strtotime($w->datum) < strtotime('today'); });
+        }
+        
         ?>
         <div class="wrap">
             <h1>Wettkampf Manager <a href="?page=wettkampf-new" class="page-title-action">Neuer Wettkampf</a></h1>
             
-<!-- WordPress-style Filter Tabs -->
-<ul class="subsubsub">
-    <li class="all">
-        <a href="?page=wettkampf-manager&filter=all" class="current">
-            Alle <span class="count">(15)</span>
-        </a> |
-    </li>
-    <li class="active">
-        <a href="?page=wettkampf-manager&filter=active">
-            Aktive <span class="count">(8)</span>
-        </a> |
-    </li>
-    <li class="inactive">
-        <a href="?page=wettkampf-manager&filter=inactive">
-            Vergangene <span class="count">(7)</span>
-        </a>
-    </li>
-</ul>
+            <!-- WordPress-style Filter Tabs -->
+            <ul class="subsubsub">
+                <li class="all">
+                    <a href="?page=wettkampf-manager&filter=all" class="<?php echo $current_filter === 'all' ? 'current' : ''; ?>">
+                        Alle <span class="count">(<?php echo $alle_count; ?>)</span>
+                    </a> |
+                </li>
+                <li class="active">
+                    <a href="?page=wettkampf-manager&filter=active" class="<?php echo $current_filter === 'active' ? 'current' : ''; ?>">
+                        Aktive <span class="count">(<?php echo $aktive_count; ?>)</span>
+                    </a> |
+                </li>
+                <li class="inactive">
+                    <a href="?page=wettkampf-manager&filter=inactive" class="<?php echo $current_filter === 'inactive' ? 'current' : ''; ?>">
+                        Vergangene <span class="count">(<?php echo $vergangene_count; ?>)</span>
+                    </a>
+                </li>
+            </ul>
 
             <table class="wp-list-table widefat fixed striped">
                 <thead>
@@ -157,24 +172,28 @@ class WettkampfAdmin {
                             $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
                             
                             $disziplinen = $wpdb->get_results($wpdb->prepare("
-                                SELECT d.name 
+                                SELECT d.name, d.kategorie 
                                 FROM $table_zuordnung z 
                                 JOIN $table_disziplinen d ON z.disziplin_id = d.id 
                                 WHERE z.wettkampf_id = %d AND d.aktiv = 1
                                 ORDER BY d.sortierung ASC, d.name ASC
                             ", $wettkampf->id));
                             
-                            $disziplin_names = array();
+                            $disziplin_info = array();
                             if (is_array($disziplinen) && !empty($disziplinen)) {
                                 foreach ($disziplinen as $d) {
                                     if (is_object($d) && isset($d->name) && !empty($d->name)) {
-                                        $disziplin_names[] = esc_html($d->name);
+                                        $info = esc_html($d->name);
+                                        if (!empty($d->kategorie) && $d->kategorie !== 'Alle') {
+                                            $info .= ' <span style="font-size: 10px; background: #e5e7eb; padding: 1px 4px; border-radius: 3px;">' . esc_html($d->kategorie) . '</span>';
+                                        }
+                                        $disziplin_info[] = $info;
                                     }
                                 }
                             }
                             
-                            if (!empty($disziplin_names)) {
-                                echo '<small>' . implode(', ', $disziplin_names) . '</small>';
+                            if (!empty($disziplin_info)) {
+                                echo '<small>' . implode(', ', $disziplin_info) . '</small>';
                             } else {
                                 echo '<small>Keine Disziplinen</small>';
                             }
@@ -251,9 +270,9 @@ class WettkampfAdmin {
                         <th><label for="disziplinen">Disziplinen</label></th>
                         <td>
                             <?php
-                            // Alle verfügbaren Disziplinen laden
+                            // Alle verfügbaren Disziplinen laden - GRUPPIERT nach Kategorien
                             $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
-                            $alle_disziplinen = $wpdb->get_results("SELECT * FROM $table_disziplinen WHERE aktiv = 1 ORDER BY sortierung ASC, name ASC");
+                            $alle_disziplinen = $wpdb->get_results("SELECT * FROM $table_disziplinen WHERE aktiv = 1 ORDER BY kategorie ASC, sortierung ASC, name ASC");
                             
                             // Ausgewählte Disziplinen für diesen Wettkampf laden
                             $ausgewaehlte_disziplinen = array();
@@ -265,20 +284,46 @@ class WettkampfAdmin {
                                 }
                             }
                             
-                            if (!empty($alle_disziplinen)): ?>
-                                <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #f9f9f9;">
-                                    <?php foreach ($alle_disziplinen as $disziplin): ?>
-                                        <label style="display: block; margin-bottom: 5px;">
-                                            <input type="checkbox" name="disziplinen[]" value="<?php echo $disziplin->id; ?>" 
-                                                   <?php echo in_array($disziplin->id, $ausgewaehlte_disziplinen) ? 'checked' : ''; ?>>
-                                            <?php echo esc_html($disziplin->name); ?>
-                                            <?php if ($disziplin->beschreibung): ?>
-                                                <small style="color: #666;">(<?php echo esc_html($disziplin->beschreibung); ?>)</small>
-                                            <?php endif; ?>
-                                        </label>
+                            if (!empty($alle_disziplinen)): 
+                                // Gruppiere Disziplinen nach Kategorien
+                                $grouped_disziplinen = array();
+                                foreach ($alle_disziplinen as $disziplin) {
+                                    $kategorie = !empty($disziplin->kategorie) ? $disziplin->kategorie : 'Alle';
+                                    if (!isset($grouped_disziplinen[$kategorie])) {
+                                        $grouped_disziplinen[$kategorie] = array();
+                                    }
+                                    $grouped_disziplinen[$kategorie][] = $disziplin;
+                                }
+                                ?>
+                                <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; background: #f9f9f9;">
+                                    <div style="margin-bottom: 10px; padding: 5px 10px; background: #e0f2fe; border-radius: 5px; font-size: 12px; color: #0891b2;">
+                                        <strong>💡 Tipp:</strong> Wähle nur die Disziplinen aus, die für diesen Wettkampf relevant sind. 
+                                        Die Teilnehmer sehen nur Disziplinen ihrer Alterskategorie.
+                                    </div>
+                                    
+                                    <?php foreach ($grouped_disziplinen as $kategorie => $disziplinen): ?>
+                                        <div style="margin-bottom: 20px;">
+                                            <h4 style="margin: 0 0 10px 0; color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">
+                                                <span class="kategorie-badge kategorie-<?php echo strtolower($kategorie); ?>">
+                                                    <?php echo esc_html($kategorie); ?>
+                                                </span>
+                                            </h4>
+                                            <div style="margin-left: 10px;">
+                                                <?php foreach ($disziplinen as $disziplin): ?>
+                                                    <label style="display: block; margin-bottom: 8px; padding: 5px; border-radius: 3px; transition: background-color 0.2s;">
+                                                        <input type="checkbox" name="disziplinen[]" value="<?php echo $disziplin->id; ?>" 
+                                                               <?php echo in_array($disziplin->id, $ausgewaehlte_disziplinen) ? 'checked' : ''; ?>>
+                                                        <strong><?php echo esc_html($disziplin->name); ?></strong>
+                                                        <?php if ($disziplin->beschreibung): ?>
+                                                            <small style="color: #666; margin-left: 10px;">(<?php echo esc_html($disziplin->beschreibung); ?>)</small>
+                                                        <?php endif; ?>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
                                     <?php endforeach; ?>
                                 </div>
-                                <small>Wähle nur die Disziplinen aus, die für diesen Wettkampf relevant sind. Lasse alle unausgewählt, wenn dieser Wettkampf keine spezifischen Disziplinen hat.</small>
+                                <small>Lasse alle unausgewählt, wenn dieser Wettkampf keine spezifischen Disziplinen hat.</small>
                             <?php else: ?>
                                 <p><em>Keine Disziplinen verfügbar. <a href="?page=wettkampf-disziplinen">Disziplinen verwalten</a></em></p>
                             <?php endif; ?>
@@ -318,6 +363,7 @@ class WettkampfAdmin {
             $data = array(
                 'name' => sanitize_text_field($_POST['name']),
                 'beschreibung' => sanitize_textarea_field($_POST['beschreibung']),
+                'kategorie' => sanitize_text_field($_POST['kategorie']),
                 'aktiv' => isset($_POST['aktiv']) ? 1 : 0,
                 'sortierung' => intval($_POST['sortierung'])
             );
@@ -334,7 +380,7 @@ class WettkampfAdmin {
         }
         
         $table_name = $wpdb->prefix . 'wettkampf_disziplinen';
-        $disziplinen = $wpdb->get_results("SELECT * FROM $table_name ORDER BY sortierung ASC, name ASC");
+        $disziplinen = $wpdb->get_results("SELECT * FROM $table_name ORDER BY kategorie ASC, sortierung ASC, name ASC");
         
         $edit_disziplin = null;
         if (isset($_GET['edit'])) {
@@ -366,6 +412,21 @@ class WettkampfAdmin {
                             <td><textarea id="beschreibung" name="beschreibung" rows="3" class="large-text"><?php echo $edit_disziplin ? esc_textarea($edit_disziplin->beschreibung) : ''; ?></textarea></td>
                         </tr>
                         <tr>
+                            <th><label for="kategorie">Alterskategorie *</label></th>
+                            <td>
+                                <select id="kategorie" name="kategorie" required>
+                                    <option value="">Bitte wählen</option>
+                                    <option value="U10" <?php echo ($edit_disziplin && $edit_disziplin->kategorie === 'U10') ? 'selected' : ''; ?>>U10 (unter 10 Jahre)</option>
+                                    <option value="U12" <?php echo ($edit_disziplin && $edit_disziplin->kategorie === 'U12') ? 'selected' : ''; ?>>U12 (unter 12 Jahre)</option>
+                                    <option value="U14" <?php echo ($edit_disziplin && $edit_disziplin->kategorie === 'U14') ? 'selected' : ''; ?>>U14 (unter 14 Jahre)</option>
+                                    <option value="U16" <?php echo ($edit_disziplin && $edit_disziplin->kategorie === 'U16') ? 'selected' : ''; ?>>U16 (unter 16 Jahre)</option>
+                                    <option value="U18" <?php echo ($edit_disziplin && $edit_disziplin->kategorie === 'U18') ? 'selected' : ''; ?>>U18 (unter 18 Jahre)</option>
+                                    <option value="Alle" <?php echo ($edit_disziplin && $edit_disziplin->kategorie === 'Alle') ? 'selected' : ''; ?>>Alle Kategorien</option>
+                                </select>
+                                <p class="description">Wähle die Alterskategorie, für die diese Disziplin verfügbar ist. Maßgebend ist das Alter, das im aktuellen Jahr erreicht wird.</p>
+                            </td>
+                        </tr>
+                        <tr>
                             <th><label for="sortierung">Sortierung</label></th>
                             <td>
                                 <input type="number" id="sortierung" name="sortierung" value="<?php echo $edit_disziplin ? $edit_disziplin->sortierung : 0; ?>" min="0" max="999">
@@ -394,6 +455,7 @@ class WettkampfAdmin {
                     <tr>
                         <th>Name</th>
                         <th>Beschreibung</th>
+                        <th>Kategorie</th>
                         <th>Sortierung</th>
                         <th>Status</th>
                         <th>Aktionen</th>
@@ -402,7 +464,7 @@ class WettkampfAdmin {
                 <tbody>
                     <?php if (empty($disziplinen)): ?>
                         <tr>
-                            <td colspan="5" style="text-align: center; color: #666; font-style: italic;">
+                            <td colspan="6" style="text-align: center; color: #666; font-style: italic;">
                                 Keine Disziplinen vorhanden. Erstellen Sie die erste Disziplin mit dem Formular oben.
                             </td>
                         </tr>
@@ -411,6 +473,11 @@ class WettkampfAdmin {
                         <tr>
                             <td><strong><?php echo esc_html($disziplin->name); ?></strong></td>
                             <td><?php echo esc_html($disziplin->beschreibung); ?></td>
+                            <td>
+                                <span class="kategorie-badge kategorie-<?php echo strtolower($disziplin->kategorie); ?>">
+                                    <?php echo esc_html($disziplin->kategorie ?: 'Nicht gesetzt'); ?>
+                                </span>
+                            </td>
                             <td><?php echo $disziplin->sortierung; ?></td>
                             <td>
                                 <?php if ($disziplin->aktiv): ?>
@@ -432,18 +499,43 @@ class WettkampfAdmin {
             </table>
             
             <div style="margin-top: 20px; padding: 15px; background: #f0f6fc; border-left: 4px solid #2271b1;">
-                <h3>💡 Hinweise zur Disziplin-Verwaltung:</h3>
+                <h3>💡 Hinweise zur Disziplin-Verwaltung mit Kategorien:</h3>
                 <ul>
-                    <li><strong>Sortierung:</strong> Verwenden Sie Zahlen wie 10, 20, 30... um später einfach neue Disziplinen einfügen zu können</li>
-                    <li><strong>Aktiv/Inaktiv:</strong> Inaktive Disziplinen werden nicht bei der Wettkampf-Erstellung angezeigt</li>
+                    <li><strong>Alterskategorien:</strong> Es gibt nur 5 Kategorien: U10, U12, U14, U16, U18</li>
+                    <li><strong>Zuordnung:</strong> Kinder unter 10 → U10, 10-11 Jahre → U12, 12-13 Jahre → U14, 14-15 Jahre → U16, 16+ Jahre → U18</li>
+                    <li><strong>Berechnung:</strong> Maßgebend ist das Alter, das im Jahr <?php echo date('Y'); ?> erreicht wird</li>
+                    <li><strong>Kategorie "Alle":</strong> Diese Disziplin wird allen Alterskategorien angezeigt</li>
+                    <li><strong>Beispiel:</strong> Ein Kind geboren 2016 → 2025 - 2016 = 9 Jahre → Kategorie U10</li>
+                    <li><strong>Beispiel:</strong> Ein Kind geboren 2014 → 2025 - 2014 = 11 Jahre → Kategorie U12</li>
                     <li><strong>Löschen:</strong> Beim Löschen werden alle Zuordnungen zu Wettkämpfen und Anmeldungen entfernt</li>
-                    <li><strong>Standard-Disziplinen:</strong> Beim ersten Aktivieren des Plugins werden automatisch Beispiel-Disziplinen erstellt</li>
                 </ul>
             </div>
         </div>
+        
+        <style>
+        .kategorie-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #e5e7eb;
+            color: #374151;
+        }
+        
+        .kategorie-badge.kategorie-u10 { background: #dbeafe; color: #1e40af; }
+        .kategorie-badge.kategorie-u12 { background: #dcfce7; color: #166534; }
+        .kategorie-badge.kategorie-u14 { background: #fde2e8; color: #be185d; }
+        .kategorie-badge.kategorie-u16 { background: #ede9fe; color: #7c3aed; }
+        .kategorie-badge.kategorie-u18 { background: #fed7d7; color: #c53030; }
+        .kategorie-badge.kategorie-alle { background: #d1fae5; color: #065f46; }
+        </style>
         <?php
     }
     
+    // Anmeldungen und andere Methoden bleiben gleich wie vorher...
     public function admin_anmeldungen() {
         global $wpdb;
         
@@ -601,7 +693,12 @@ class WettkampfAdmin {
                             </tr>
                             <tr>
                                 <th><label for="jahrgang">Jahrgang</label></th>
-                                <td><input type="number" id="jahrgang" name="jahrgang" value="<?php echo esc_attr($edit_anmeldung->jahrgang); ?>" min="1900" max="<?php echo date('Y'); ?>" required></td>
+                                <td>
+                                    <input type="number" id="jahrgang" name="jahrgang" value="<?php echo esc_attr($edit_anmeldung->jahrgang); ?>" min="1900" max="<?php echo date('Y'); ?>" required>
+                                    <p class="description">
+                                        Alterskategorie: <strong><?php echo WettkampfManager::calculateAgeCategory($edit_anmeldung->jahrgang); ?></strong>
+                                    </p>
+                                </td>
                             </tr>
                             <tr>
                                 <th><label for="eltern_fahren">Eltern fahren</label></th>
@@ -618,17 +715,20 @@ class WettkampfAdmin {
                                 <th><label for="disziplinen">Disziplinen</label></th>
                                 <td>
                                     <?php
-                                    // Disziplinen für diesen Wettkampf laden
+                                    // Disziplinen für diesen Wettkampf laden mit Kategorie-Filter
                                     $table_zuordnung = $wpdb->prefix . 'wettkampf_disziplin_zuordnung';
                                     $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
+                                    
+                                    $user_category = WettkampfManager::calculateAgeCategory($edit_anmeldung->jahrgang);
                                     
                                     $wettkampf_disziplinen = $wpdb->get_results($wpdb->prepare("
                                         SELECT d.* 
                                         FROM $table_zuordnung z 
                                         JOIN $table_disziplinen d ON z.disziplin_id = d.id 
-                                        WHERE z.wettkampf_id = %d AND d.aktiv = 1
+                                        WHERE z.wettkampf_id = %d AND d.aktiv = 1 
+                                        AND (d.kategorie = %s OR d.kategorie = 'Alle')
                                         ORDER BY d.sortierung ASC, d.name ASC
-                                    ", $edit_anmeldung->wettkampf_id));
+                                    ", $edit_anmeldung->wettkampf_id, $user_category));
                                     
                                     // Bereits ausgewählte Disziplinen laden
                                     $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
@@ -640,12 +740,18 @@ class WettkampfAdmin {
                                     $selected_ids = array_map(function($d) { return $d->disziplin_id; }, $selected_disziplinen);
                                     
                                     if (!empty($wettkampf_disziplinen)): ?>
+                                        <div style="background: #f0f6fc; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                                            <small><strong>Verfügbare Disziplinen für Kategorie <?php echo $user_category; ?>:</strong></small>
+                                        </div>
                                         <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #f9f9f9;">
                                             <?php foreach ($wettkampf_disziplinen as $disziplin): ?>
                                                 <label style="display: block; margin-bottom: 5px;">
                                                     <input type="checkbox" name="disziplinen[]" value="<?php echo $disziplin->id; ?>" 
                                                            <?php echo in_array($disziplin->id, $selected_ids) ? 'checked' : ''; ?>>
                                                     <?php echo esc_html($disziplin->name); ?>
+                                                    <span class="kategorie-badge kategorie-<?php echo strtolower($disziplin->kategorie); ?>" style="margin-left: 5px; font-size: 9px;">
+                                                        <?php echo esc_html($disziplin->kategorie); ?>
+                                                    </span>
                                                     <?php if ($disziplin->beschreibung): ?>
                                                         <small style="color: #666;">(<?php echo esc_html($disziplin->beschreibung); ?>)</small>
                                                     <?php endif; ?>
@@ -653,7 +759,7 @@ class WettkampfAdmin {
                                             <?php endforeach; ?>
                                         </div>
                                     <?php else: ?>
-                                        <p><em>Keine Disziplinen für diesen Wettkampf definiert.</em></p>
+                                        <p><em>Keine Disziplinen für Kategorie <?php echo $user_category; ?> bei diesem Wettkampf definiert.</em></p>
                                     <?php endif; ?>
                                 </td>
                             </tr>
@@ -740,6 +846,7 @@ class WettkampfAdmin {
                         <th style="width: 200px;">E-Mail</th>
                         <th style="width: 80px;">Geschlecht</th>
                         <th style="width: 80px;">Jahrgang</th>
+                        <th style="width: 60px;">Kategorie</th>
                         <th style="width: 200px;">Wettkampf</th>
                         <th style="width: 100px;">Datum</th>
                         <th style="width: 80px;">Eltern</th>
@@ -752,7 +859,7 @@ class WettkampfAdmin {
                 <tbody>
                     <?php if (empty($anmeldungen)): ?>
                         <tr>
-                            <td colspan="11" style="text-align: center; color: #666; font-style: italic; padding: 40px;">
+                            <td colspan="12" style="text-align: center; color: #666; font-style: italic; padding: 40px;">
                                 Keine Anmeldungen gefunden.
                                 <?php if (!empty($search) || !empty($wettkampf_filter)): ?>
                                     <br><a href="?page=wettkampf-anmeldungen">Alle Anmeldungen anzeigen</a>
@@ -779,12 +886,19 @@ class WettkampfAdmin {
                                     }
                                 }
                             }
+                            
+                            $user_category = WettkampfManager::calculateAgeCategory($anmeldung->jahrgang);
                             ?>
                             <tr>
                                 <td><strong><?php echo esc_html($anmeldung->vorname . ' ' . $anmeldung->name); ?></strong></td>
                                 <td><?php echo esc_html($anmeldung->email); ?></td>
                                 <td><?php echo esc_html($anmeldung->geschlecht); ?></td>
                                 <td><?php echo esc_html($anmeldung->jahrgang); ?></td>
+                                <td>
+                                    <span class="kategorie-badge kategorie-<?php echo strtolower($user_category); ?>">
+                                        <?php echo esc_html($user_category); ?>
+                                    </span>
+                                </td>
                                 <td>
                                     <strong><?php echo esc_html($anmeldung->wettkampf_name); ?></strong><br>
                                     <small><?php echo date('d.m.Y', strtotime($anmeldung->wettkampf_datum)); ?> - <?php echo esc_html($anmeldung->wettkampf_ort); ?></small>
@@ -815,9 +929,9 @@ class WettkampfAdmin {
                                     <?php echo date('d.m.Y H:i', strtotime($anmeldung->anmeldedatum)); ?>
                                 </td>
                                 <td>
-                                    <a href="?page=wettkampf-anmeldungen&edit=<?php echo $anmeldung->id; ?> title="Bearbeiten">Bearbeiten</a> |
+                                    <a href="?page=wettkampf-anmeldungen&edit=<?php echo $anmeldung->id; ?>" title="Bearbeiten">Bearbeiten</a> |
                                     <a href="?page=wettkampf-anmeldungen&delete=<?php echo $anmeldung->id; ?>&_wpnonce=<?php echo wp_create_nonce('delete_anmeldung'); ?>" 
-                                       onclick="return confirm('Anmeldung wirklich löschen?') title="Löschen">Löschen</a>
+                                       onclick="return confirm('Anmeldung wirklich löschen?')" title="Löschen">Löschen</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -826,19 +940,20 @@ class WettkampfAdmin {
             </table>
             
             <div class="help-text">
-                <h4>💡 Hinweise zur Anmeldungsverwaltung:</h4>
+                <h4>💡 Hinweise zur Anmeldungsverwaltung mit Kategorien:</h4>
                 <ul>
+                    <li><strong>Kategorien:</strong> Werden automatisch basierend auf dem Jahrgang berechnet (Alter im aktuellen Jahr)</li>
+                    <li><strong>Disziplinen:</strong> Beim Bearbeiten werden nur Disziplinen der entsprechenden Kategorie angezeigt</li>
                     <li><strong>Filter:</strong> Verwenden Sie die Dropdown-Filter um spezifische Wettkämpfe oder Suchbegriffe zu finden</li>
                     <li><strong>Excel Export:</strong> Exportiert alle gefilterten Anmeldungen als Excel-Datei</li>
                     <li><strong>Löschen:</strong> Beim Löschen werden auch alle Disziplin-Zuordnungen entfernt</li>
-                    <li><strong>Statistiken:</strong> Die Übersicht zeigt aktuelle Anmeldezahlen</li>
                 </ul>
             </div>
         </div>
         <?php
     }
     
-    // COMPLETELY CLEAN Excel Export - NO WordPress admin content!
+    // Excel Export and other methods remain the same...
     private function export_anmeldungen_xlsx() {
         global $wpdb;
         
@@ -922,6 +1037,7 @@ class WettkampfAdmin {
         echo '<th>E-Mail</th>';
         echo '<th>Geschlecht</th>';
         echo '<th>Jahrgang</th>';
+        echo '<th>Kategorie</th>';
         echo '<th>Wettkampf</th>';
         echo '<th>Wettkampf Datum</th>';
         echo '<th>Wettkampf Ort</th>';
@@ -953,12 +1069,15 @@ class WettkampfAdmin {
                 }
             }
             
+            $user_category = WettkampfManager::calculateAgeCategory($anmeldung->jahrgang);
+            
             echo '<tr>';
             echo '<td>' . htmlspecialchars($anmeldung->vorname, ENT_QUOTES, 'UTF-8') . '</td>';
             echo '<td>' . htmlspecialchars($anmeldung->name, ENT_QUOTES, 'UTF-8') . '</td>';
             echo '<td>' . htmlspecialchars($anmeldung->email, ENT_QUOTES, 'UTF-8') . '</td>';
             echo '<td>' . htmlspecialchars($anmeldung->geschlecht, ENT_QUOTES, 'UTF-8') . '</td>';
             echo '<td>' . htmlspecialchars($anmeldung->jahrgang, ENT_QUOTES, 'UTF-8') . '</td>';
+            echo '<td>' . htmlspecialchars($user_category, ENT_QUOTES, 'UTF-8') . '</td>';
             echo '<td>' . htmlspecialchars($anmeldung->wettkampf_name, ENT_QUOTES, 'UTF-8') . '</td>';
             echo '<td>' . date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . '</td>';
             echo '<td>' . htmlspecialchars($anmeldung->wettkampf_ort, ENT_QUOTES, 'UTF-8') . '</td>';
