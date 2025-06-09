@@ -1,6 +1,8 @@
 jQuery(document).ready(function($) {
     'use strict';
     
+    console.log('Wettkampf Frontend JavaScript wird geladen...');
+    
     // Modal elements
     const anmeldungModal = $('#anmeldung-modal');
     const mutationModal = $('#mutation-modal');
@@ -77,27 +79,56 @@ jQuery(document).ready(function($) {
         return category;
     }
     
-    // Toggle details accordion
-    $(document).on('click', '.details-toggle', function(e) {
-        e.preventDefault();
-        const wettkampfId = $(this).data('wettkampf-id');
-        const detailsDiv = $('#details-' + wettkampfId);
-        const toggleButton = $(this);
-        const toggleText = toggleButton.find('.toggle-text');
+    // KORRIGIERTER Details Toggle - Wettkampf Details Accordion
+    function initDetailsToggle() {
+        // Entferne alle bestehenden Event Handler um Konflikte zu vermeiden
+        $(document).off('click', '.details-toggle');
         
-        console.log('Accordion clicked for wettkampf:', wettkampfId);
-        console.log('Details div found:', detailsDiv.length);
+        // Füge neuen Event Handler hinzu
+        $(document).on('click', '.details-toggle', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const button = $(this);
+            const wettkampfId = button.data('wettkampf-id');
+            const detailsDiv = $('#details-' + wettkampfId);
+            const toggleText = button.find('.toggle-text');
+            const toggleIcon = button.find('.toggle-icon');
+            
+            console.log('Details Toggle geklickt für Wettkampf:', wettkampfId);
+            console.log('Details div gefunden:', detailsDiv.length);
+            console.log('Button element:', button);
+            
+            if (!detailsDiv.length) {
+                console.error('Details div nicht gefunden für ID: details-' + wettkampfId);
+                return;
+            }
+            
+            // Prüfe aktuellen Status
+            const isVisible = detailsDiv.hasClass('show') || detailsDiv.is(':visible');
+            
+            if (isVisible) {
+                // Details schließen
+                detailsDiv.removeClass('show').slideUp(300);
+                if (toggleText.length) toggleText.text('Details anzeigen');
+                if (toggleIcon.length) toggleIcon.text('▼');
+                button.removeClass('active');
+                console.log('Details geschlossen für Wettkampf:', wettkampfId);
+            } else {
+                // Details öffnen
+                detailsDiv.addClass('show').slideDown(300);
+                if (toggleText.length) toggleText.text('Details ausblenden');
+                if (toggleIcon.length) toggleIcon.text('▲');
+                button.addClass('active');
+                console.log('Details geöffnet für Wettkampf:', wettkampfId);
+            }
+        });
         
-        if (detailsDiv.hasClass('show') || detailsDiv.is(':visible')) {
-            detailsDiv.removeClass('show').slideUp(300);
-            toggleText.text('Details anzeigen');
-            toggleButton.removeClass('active');
-        } else {
-            detailsDiv.addClass('show').slideDown(300);
-            toggleText.text('Details ausblenden');
-            toggleButton.addClass('active');
-        }
-    });
+        console.log('Details Toggle Event Handler registriert für', $('.details-toggle').length, 'Buttons');
+    }
+    
+    // Details Toggle sofort initialisieren
+    initDetailsToggle();
     
     // KOMPLETT ÜBERARBEITETER Disziplinen Toggle - FINALE VERSION
     let disziplinenToggleInProgress = false;
@@ -150,6 +181,7 @@ jQuery(document).ready(function($) {
     }
     
     // EINZELNER Event-Handler für Disziplinen Toggle
+    $(document).off('click', '.show-disziplinen-button');
     $(document).on('click', '.show-disziplinen-button', function(e) {
         e.preventDefault();
         e.stopPropagation();
@@ -992,5 +1024,11 @@ jQuery(document).ready(function($) {
         }, 100);
     });
     
-    console.log('Wettkampf Frontend JS with FINAL Cross-Platform Disziplinen Toggle Fix loaded successfully');
+    // Re-initialize details toggle after any dynamic content loads
+    $(document).ajaxComplete(function() {
+        // Re-attach event handlers for any dynamically loaded content
+        initDetailsToggle();
+    });
+    
+    console.log('Wettkampf Frontend JavaScript mit korrigiertem Details Toggle und vollständiger Funktionalität erfolgreich geladen');
 });

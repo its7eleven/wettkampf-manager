@@ -1,6 +1,6 @@
 <?php
 /**
- * Main plugin management class
+ * Main plugin management class - KORRIGIERTE JS LOADING VERSION
  */
 
 // Prevent direct access
@@ -14,11 +14,6 @@ class WettkampfManager {
      * Plugin version
      */
     protected $version;
-    
-    /**
-     * Plugin loader
-     */
-    protected $loader;
     
     /**
      * Admin handler
@@ -42,40 +37,111 @@ class WettkampfManager {
     }
     
     /**
-     * Load plugin dependencies
+     * Load plugin dependencies - MIT EXISTENZ-PRÜFUNG
      */
     private function load_dependencies() {
-        // Core utilities
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/utils/class-wettkampf-helpers.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/utils/class-category-calculator.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/utils/class-email-manager.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/utils/class-security-manager.php';
+        // Core utilities - MIT FALLBACK
+        $this->require_file_safe('includes/utils/class-wettkampf-helper.php');
+        $this->require_file_safe('includes/utils/class-category-calculator.php');
+        $this->require_file_safe('includes/utils/class-email-manager.php');
+        $this->require_file_safe('includes/utils/class-security-manager.php');
         
         // Core classes
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/core/class-wettkampf-database.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/core/class-wettkampf-cron.php';
+        $this->require_file_safe('includes/core/class-wettkampf-database.php');
+        $this->require_file_safe('includes/core/class-wettkampf-cron.php');
         
         // Admin classes (only if in admin)
         if (is_admin()) {
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-wettkampf-admin.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-menu.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-wettkampf.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-disziplinen.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-anmeldungen.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-export.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-settings.php';
+            $this->require_file_safe('includes/admin/class-admin-menu.php');
+            $this->require_file_safe('includes/admin/class-admin-wettkampf.php');
+            $this->require_file_safe('includes/admin/class-admin-disziplinen.php');
+            $this->require_file_safe('includes/admin/class-admin-anmeldungen.php');
+            $this->require_file_safe('includes/admin/class-admin-export.php');
+            $this->require_file_safe('includes/admin/class-admin-settings.php');
             
-            $this->admin = new WettkampfAdmin();
+            // KORRIGIERT: Prüfe beide möglichen Dateinamen
+            if (file_exists(WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-wettkampf-admin.php')) {
+                require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-wettkampf-admin.php';
+            } elseif (file_exists(WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-wettkampf-manager.php')) {
+                require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-wettkampf-manager.php';
+            } else {
+                // Erstelle eine Minimal-Admin-Klasse als Fallback
+                $this->create_minimal_admin_class();
+            }
+            
+            // Nur instanziieren wenn Klasse existiert
+            if (class_exists('WettkampfAdmin')) {
+                $this->admin = new WettkampfAdmin();
+            }
         }
         
         // Frontend classes
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-wettkampf-frontend.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-frontend-display.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-frontend-forms.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-frontend-ajax.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-frontend-shortcodes.php';
+        $this->require_file_safe('includes/frontend/class-frontend-display.php');
+        $this->require_file_safe('includes/frontend/class-frontend-forms.php');
+        $this->require_file_safe('includes/frontend/class-frontend-ajax.php');
+        $this->require_file_safe('includes/frontend/class-frontend-shortcodes.php');
+        $this->require_file_safe('includes/frontend/class-wettkampf-frontend.php');
         
-        $this->frontend = new WettkampfFrontend();
+        // Nur instanziieren wenn Klasse existiert
+        if (class_exists('WettkampfFrontend')) {
+            $this->frontend = new WettkampfFrontend();
+        }
+    }
+    
+    /**
+     * Sichere Datei-Einbindung mit Fehlerbehandlung
+     */
+    private function require_file_safe($relative_path) {
+        $full_path = WETTKAMPF_PLUGIN_PATH . $relative_path;
+        
+        if (file_exists($full_path)) {
+            require_once $full_path;
+        } else {
+            error_log("Wettkampf Manager: Datei nicht gefunden: $relative_path");
+        }
+    }
+    
+    /**
+     * Erstelle eine minimale Admin-Klasse als Fallback
+     */
+    private function create_minimal_admin_class() {
+        if (!class_exists('WettkampfAdmin')) {
+            eval('
+            class WettkampfAdmin {
+                public function __construct() {
+                    add_action("admin_menu", array($this, "add_admin_menu"));
+                }
+                
+                public function add_admin_menu() {
+                    add_menu_page(
+                        "Wettkampf Manager",
+                        "Wettkämpfe", 
+                        "manage_options",
+                        "wettkampf-manager",
+                        array($this, "display_page"),
+                        "dashicons-awards",
+                        30
+                    );
+                }
+                
+                public function display_page() {
+                    echo "<div class=\"wrap\">";
+                    echo "<h1>Wettkampf Manager</h1>";
+                    echo "<p>Plugin wird geladen... Einige Admin-Dateien fehlen noch.</p>";
+                    echo "<p>Bitte prüfe die Dateistruktur:</p>";
+                    echo "<ul>";
+                    echo "<li>includes/admin/class-admin-menu.php</li>";
+                    echo "<li>includes/admin/class-admin-wettkampf.php</li>";
+                    echo "<li>includes/admin/class-admin-disziplinen.php</li>";
+                    echo "<li>includes/admin/class-admin-anmeldungen.php</li>";
+                    echo "<li>includes/admin/class-admin-export.php</li>";
+                    echo "<li>includes/admin/class-admin-settings.php</li>";
+                    echo "</ul>";
+                    echo "</div>";
+                }
+            }
+            ');
+        }
     }
     
     /**
@@ -103,53 +169,55 @@ class WettkampfManager {
      * Initialize shortcodes
      */
     public function init_shortcodes() {
-        $shortcodes = new FrontendShortcodes();
-        $shortcodes->init();
+        if (class_exists('FrontendShortcodes')) {
+            $shortcodes = new FrontendShortcodes();
+            $shortcodes->init();
+        }
     }
     
     /**
      * Initialize AJAX handlers
      */
     public function init_ajax_handlers() {
-        $ajax = new FrontendAjax();
-        $ajax->init();
+        if (class_exists('FrontendAjax')) {
+            $ajax = new FrontendAjax();
+            $ajax->init();
+        }
     }
     
     /**
-     * Enqueue admin scripts and styles
+     * Enqueue admin scripts and styles - KORRIGIERT
      */
     public function enqueue_admin_scripts($hook) {
         if (strpos($hook, 'wettkampf') === false) {
             return;
         }
         
-        $cache_version = $this->version . '.1';
+        $cache_version = $this->version . '.2';
         
-        wp_enqueue_style(
-            'wettkampf-admin',
-            WETTKAMPF_PLUGIN_URL . 'assets/css/admin.css',
-            array(),
-            $cache_version
-        );
+        // Prüfe ob CSS-Datei existiert
+        $admin_css = WETTKAMPF_PLUGIN_PATH . 'assets/css/admin.css';
+        if (file_exists($admin_css)) {
+            wp_enqueue_style(
+                'wettkampf-admin',
+                WETTKAMPF_PLUGIN_URL . 'assets/css/admin.css',
+                array(),
+                $cache_version
+            );
+        }
         
-        if (isset($_GET['page']) && $_GET['page'] === 'wettkampf-anmeldungen') {
+        // KORRIGIERT: Nur eine admin.js Datei laden
+        $admin_js = WETTKAMPF_PLUGIN_PATH . 'assets/js/admin.js';
+        if (file_exists($admin_js)) {
             wp_enqueue_script(
-                'wettkampf-admin-core',
-                WETTKAMPF_PLUGIN_URL . 'assets/js/admin/admin-core.js',
+                'wettkampf-admin',
+                WETTKAMPF_PLUGIN_URL . 'assets/js/admin.js',
                 array('jquery'),
                 $cache_version,
                 true
             );
             
-            wp_enqueue_script(
-                'wettkampf-admin-export',
-                WETTKAMPF_PLUGIN_URL . 'assets/js/admin/admin-export.js',
-                array('wettkampf-admin-core'),
-                $cache_version,
-                true
-            );
-            
-            wp_localize_script('wettkampf-admin-core', 'wettkampf_admin_ajax', array(
+            wp_localize_script('wettkampf-admin', 'wettkampf_admin_ajax', array(
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('wettkampf_admin_ajax')
             ));
@@ -157,74 +225,106 @@ class WettkampfManager {
     }
     
     /**
-     * Enqueue frontend scripts and styles
+     * Enqueue frontend scripts and styles - KORRIGIERT: NUR EINE JS DATEI
      */
     public function enqueue_frontend_scripts() {
-        $cache_version = $this->version . '.1';
+        $cache_version = $this->version . '.3';
         
-        // CSS
-        wp_enqueue_style(
-            'wettkampf-frontend',
-            WETTKAMPF_PLUGIN_URL . 'assets/css/frontend.css',
-            array(),
-            $cache_version
-        );
-        
-        // Core JavaScript
-        wp_enqueue_script(
-            'wettkampf-frontend-core',
-            WETTKAMPF_PLUGIN_URL . 'assets/js/frontend/frontend-core.js',
-            array('jquery'),
-            $cache_version,
-            true
-        );
-        
-        // Modal management
-        wp_enqueue_script(
-            'wettkampf-frontend-modals',
-            WETTKAMPF_PLUGIN_URL . 'assets/js/frontend/frontend-modals.js',
-            array('wettkampf-frontend-core'),
-            $cache_version,
-            true
-        );
-        
-        // Form handling
-        wp_enqueue_script(
-            'wettkampf-frontend-forms',
-            WETTKAMPF_PLUGIN_URL . 'assets/js/frontend/frontend-forms.js',
-            array('wettkampf-frontend-core'),
-            $cache_version,
-            true
-        );
-        
-        // AJAX requests
-        wp_enqueue_script(
-            'wettkampf-frontend-ajax',
-            WETTKAMPF_PLUGIN_URL . 'assets/js/frontend/frontend-ajax.js',
-            array('wettkampf-frontend-core'),
-            $cache_version,
-            true
-        );
-        
-        // reCAPTCHA
-        $recaptcha_site_key = get_option('wettkampf_recaptcha_site_key');
-        if (!empty($recaptcha_site_key)) {
-            wp_enqueue_script('recaptcha', 'https://www.google.com/recaptcha/api.js', array(), null, true);
+        // CSS - Prüfe ob Datei existiert
+        $frontend_css = WETTKAMPF_PLUGIN_PATH . 'assets/css/frontend.css';
+        if (file_exists($frontend_css)) {
+            wp_enqueue_style(
+                'wettkampf-frontend',
+                WETTKAMPF_PLUGIN_URL . 'assets/css/frontend.css',
+                array(),
+                $cache_version
+            );
+        } else {
+            error_log('Wettkampf Manager: frontend.css nicht gefunden in: ' . $frontend_css);
         }
         
-        // Localize script
-        wp_localize_script('wettkampf-frontend-core', 'wettkampf_ajax', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('wettkampf_ajax')
-        ));
+        // JavaScript - KORRIGIERT: Nur eine frontend.js Datei laden
+        $frontend_js = WETTKAMPF_PLUGIN_PATH . 'assets/js/frontend.js';
+        if (file_exists($frontend_js)) {
+            wp_enqueue_script(
+                'wettkampf-frontend',
+                WETTKAMPF_PLUGIN_URL . 'assets/js/frontend.js',
+                array('jquery'),
+                $cache_version,
+                true
+            );
+            
+            // reCAPTCHA laden falls konfiguriert
+            $recaptcha_site_key = get_option('wettkampf_recaptcha_site_key');
+            if (!empty($recaptcha_site_key)) {
+                wp_enqueue_script(
+                    'recaptcha', 
+                    'https://www.google.com/recaptcha/api.js', 
+                    array(), 
+                    null, 
+                    true
+                );
+            }
+            
+            // AJAX-Daten für JavaScript bereitstellen
+            wp_localize_script('wettkampf-frontend', 'wettkampf_ajax', array(
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('wettkampf_ajax'),
+                'debug' => defined('WP_DEBUG') && WP_DEBUG
+            ));
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Wettkampf Manager: frontend.js erfolgreich geladen');
+            }
+        } else {
+            error_log('Wettkampf Manager: FEHLER - frontend.js nicht gefunden in: ' . $frontend_js);
+            
+            // Fallback: Inline-JavaScript für grundlegende Funktionalität
+            add_action('wp_footer', array($this, 'add_fallback_javascript'));
+        }
+    }
+    
+    /**
+     * Fallback JavaScript wenn frontend.js nicht gefunden wird
+     */
+    public function add_fallback_javascript() {
+        ?>
+        <script>
+        jQuery(document).ready(function($) {
+            console.log('Wettkampf Manager: Fallback JavaScript geladen');
+            
+            // Basis Details Toggle
+            $(document).on('click', '.details-toggle', function(e) {
+                e.preventDefault();
+                const wettkampfId = $(this).data('wettkampf-id');
+                const detailsDiv = $('#details-' + wettkampfId);
+                const toggleText = $(this).find('.toggle-text');
+                
+                if (detailsDiv.is(':visible')) {
+                    detailsDiv.slideUp();
+                    if (toggleText.length) toggleText.text('Details anzeigen');
+                    $(this).removeClass('active');
+                } else {
+                    detailsDiv.slideDown();
+                    if (toggleText.length) toggleText.text('Details ausblenden');
+                    $(this).addClass('active');
+                }
+            });
+            
+            console.log('Basis-Funktionalität geladen. Bitte lade die vollständige frontend.js hoch.');
+        });
+        </script>
+        <?php
     }
     
     /**
      * Initialize cron jobs
      */
     private function init_cron_jobs() {
-        $cron = new WettkampfCron();
-        $cron->init();
+        if (class_exists('WettkampfCron')) {
+            $cron = new WettkampfCron();
+            $cron->init();
+        }
     }
     
     /**
@@ -246,39 +346,31 @@ class WettkampfManager {
         if (version_compare($from_version, '1.1.0', '<')) {
             $this->update_database_to_1_1_0();
         }
-        
-        if (version_compare($from_version, '1.2.0', '<')) {
-            $this->update_database_to_1_2_0();
-        }
     }
     
     /**
-     * Update database to version 1.1.0 - Add kategorie column
+     * Update database to version 1.1.0
      */
     private function update_database_to_1_1_0() {
-        global $wpdb;
-        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
-        
-        $column_exists = $wpdb->get_results($wpdb->prepare("
-            SELECT COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE table_name = %s 
-            AND column_name = 'kategorie'
-            AND table_schema = %s
-        ", $table_disziplinen, DB_NAME));
-        
-        if (empty($column_exists)) {
-            $wpdb->query("ALTER TABLE $table_disziplinen ADD COLUMN kategorie varchar(20) DEFAULT 'Alle' AFTER beschreibung");
-            $wpdb->query("ALTER TABLE $table_disziplinen ADD INDEX idx_kategorie (kategorie)");
-            $wpdb->query("UPDATE $table_disziplinen SET kategorie = 'Alle' WHERE kategorie IS NULL OR kategorie = ''");
+        // Nur ausführen wenn WettkampfActivator existiert
+        if (class_exists('WettkampfActivator')) {
+            global $wpdb;
+            $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
+            
+            $column_exists = $wpdb->get_results($wpdb->prepare("
+                SELECT COLUMN_NAME 
+                FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE table_name = %s 
+                AND column_name = 'kategorie'
+                AND table_schema = %s
+            ", $table_disziplinen, DB_NAME));
+            
+            if (empty($column_exists)) {
+                $wpdb->query("ALTER TABLE $table_disziplinen ADD COLUMN kategorie varchar(20) DEFAULT 'Alle' AFTER beschreibung");
+                $wpdb->query("ALTER TABLE $table_disziplinen ADD INDEX idx_kategorie (kategorie)");
+                $wpdb->query("UPDATE $table_disziplinen SET kategorie = 'Alle' WHERE kategorie IS NULL OR kategorie = ''");
+            }
         }
-    }
-    
-    /**
-     * Update database to version 1.2.0 - Future updates
-     */
-    private function update_database_to_1_2_0() {
-        // Future database updates will go here
     }
     
     /**
@@ -286,6 +378,9 @@ class WettkampfManager {
      */
     public function run() {
         // Plugin is ready to run
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Wettkampf Manager: Plugin initialized successfully');
+        }
     }
     
     /**
