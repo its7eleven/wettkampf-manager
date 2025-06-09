@@ -1,6 +1,21 @@
 <?php
 /**
- * Main plugin management class
+ * Plugin Name: Wettkampf Manager
+ * Plugin URI: https://github.com/dein-username/wettkampf-manager
+ * Description: Professionelle Wettkampf-Anmeldungen für Sportvereine. Verwalte Wettkämpfe, Disziplinen und Teilnehmer-Anmeldungen mit automatischen Kategorien (U10-U18).
+ * Version: 1.0.0
+ * Author: 7eleven
+ * Author URI: https://7eleven.ch/
+ * Text Domain: wettkampf-manager
+ * Domain Path: /languages
+ * Requires at least: 5.0
+ * Tested up to: 6.4
+ * Requires PHP: 7.4
+ * License: GPL v2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Network: false
+ *
+ * @package WettkampfManager
  */
 
 // Prevent direct access
@@ -8,290 +23,184 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class WettkampfManager {
+// Plugin constants
+define('WETTKAMPF_VERSION', '1.0.0');
+define('WETTKAMPF_DB_VERSION', '1.1.0');
+define('WETTKAMPF_PLUGIN_PATH', plugin_dir_path(__FILE__));
+define('WETTKAMPF_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('WETTKAMPF_PLUGIN_BASENAME', plugin_basename(__FILE__));
+
+/**
+ * Plugin activation hook
+ */
+function wettkampf_manager_activate() {
+    // Load activator class
+    require_once WETTKAMPF_PLUGIN_PATH . 'includes/core/class-wettkampf-activator.php';
+    WettkampfActivator::activate();
+}
+register_activation_hook(__FILE__, 'wettkampf_manager_activate');
+
+/**
+ * Plugin deactivation hook
+ */
+function wettkampf_manager_deactivate() {
+    // Load activator class
+    require_once WETTKAMPF_PLUGIN_PATH . 'includes/core/class-wettkampf-activator.php';
+    WettkampfActivator::deactivate();
+}
+register_deactivation_hook(__FILE__, 'wettkampf_manager_deactivate');
+
+/**
+ * Load plugin text domain for translations
+ */
+function wettkampf_manager_load_textdomain() {
+    load_plugin_textdomain(
+        'wettkampf-manager',
+        false,
+        dirname(WETTKAMPF_PLUGIN_BASENAME) . '/languages'
+    );
+}
+add_action('plugins_loaded', 'wettkampf_manager_load_textdomain');
+
+/**
+ * Check if WordPress and PHP requirements are met
+ */
+function wettkampf_manager_check_requirements() {
+    global $wp_version;
     
-    /**
-     * Plugin version
-     */
-    protected $version;
+    $required_wp_version = '5.0';
+    $required_php_version = '7.4';
     
-    /**
-     * Plugin loader
-     */
-    protected $loader;
-    
-    /**
-     * Admin handler
-     */
-    protected $admin;
-    
-    /**
-     * Frontend handler
-     */
-    protected $frontend;
-    
-    /**
-     * Constructor
-     */
-    public function __construct() {
-        $this->version = WETTKAMPF_VERSION;
-        $this->load_dependencies();
-        $this->define_admin_hooks();
-        $this->define_frontend_hooks();
-        $this->init_cron_jobs();
-    }
-    
-    /**
-     * Load plugin dependencies
-     */
-    private function load_dependencies() {
-        // Core utilities
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/utils/class-wettkampf-helpers.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/utils/class-category-calculator.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/utils/class-email-manager.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/utils/class-security-manager.php';
-        
-        // Core classes
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/core/class-wettkampf-database.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/core/class-wettkampf-cron.php';
-        
-        // Admin classes (only if in admin)
-        if (is_admin()) {
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-wettkampf-admin.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-menu.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-wettkampf.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-disziplinen.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-anmeldungen.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-export.php';
-            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-settings.php';
-            
-            $this->admin = new WettkampfAdmin();
-        }
-        
-        // Frontend classes
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-wettkampf-frontend.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-frontend-display.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-frontend-forms.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-frontend-ajax.php';
-        require_once WETTKAMPF_PLUGIN_PATH . 'includes/frontend/class-frontend-shortcodes.php';
-        
-        $this->frontend = new WettkampfFrontend();
-    }
-    
-    /**
-     * Define admin hooks
-     */
-    private function define_admin_hooks() {
-        if (!is_admin()) {
-            return;
-        }
-        
-        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
-    }
-    
-    /**
-     * Define frontend hooks
-     */
-    private function define_frontend_hooks() {
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_scripts'));
-        add_action('init', array($this, 'init_shortcodes'));
-        add_action('init', array($this, 'init_ajax_handlers'));
-        add_action('init', array($this, 'check_database_updates'));
-    }
-    
-    /**
-     * Initialize shortcodes
-     */
-    public function init_shortcodes() {
-        $shortcodes = new FrontendShortcodes();
-        $shortcodes->init();
-    }
-    
-    /**
-     * Initialize AJAX handlers
-     */
-    public function init_ajax_handlers() {
-        $ajax = new FrontendAjax();
-        $ajax->init();
-    }
-    
-    /**
-     * Enqueue admin scripts and styles
-     */
-    public function enqueue_admin_scripts($hook) {
-        if (strpos($hook, 'wettkampf') === false) {
-            return;
-        }
-        
-        $cache_version = $this->version . '.1';
-        
-        wp_enqueue_style(
-            'wettkampf-admin',
-            WETTKAMPF_PLUGIN_URL . 'assets/css/admin.css',
-            array(),
-            $cache_version
+    // Check WordPress version
+    if (version_compare($wp_version, $required_wp_version, '<')) {
+        deactivate_plugins(WETTKAMPF_PLUGIN_BASENAME);
+        wp_die(
+            sprintf(
+                'Wettkampf Manager benötigt WordPress %s oder höher. Du verwendest Version %s.',
+                $required_wp_version,
+                $wp_version
+            ),
+            'Plugin-Anforderungen nicht erfüllt',
+            array('back_link' => true)
         );
-        
-        if (isset($_GET['page']) && $_GET['page'] === 'wettkampf-anmeldungen') {
-            wp_enqueue_script(
-                'wettkampf-admin-core',
-                WETTKAMPF_PLUGIN_URL . 'assets/js/admin/admin-core.js',
-                array('jquery'),
-                $cache_version,
-                true
-            );
-            
-            wp_enqueue_script(
-                'wettkampf-admin-export',
-                WETTKAMPF_PLUGIN_URL . 'assets/js/admin/admin-export.js',
-                array('wettkampf-admin-core'),
-                $cache_version,
-                true
-            );
-            
-            wp_localize_script('wettkampf-admin-core', 'wettkampf_admin_ajax', array(
-                'ajax_url' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('wettkampf_admin_ajax')
-            ));
-        }
     }
     
-    /**
-     * Enqueue frontend scripts and styles
-     */
-    public function enqueue_frontend_scripts() {
-        $cache_version = $this->version . '.1';
-        
-        // CSS
-        wp_enqueue_style(
-            'wettkampf-frontend',
-            WETTKAMPF_PLUGIN_URL . 'assets/css/frontend.css',
-            array(),
-            $cache_version
+    // Check PHP version
+    if (version_compare(PHP_VERSION, $required_php_version, '<')) {
+        deactivate_plugins(WETTKAMPF_PLUGIN_BASENAME);
+        wp_die(
+            sprintf(
+                'Wettkampf Manager benötigt PHP %s oder höher. Du verwendest Version %s.',
+                $required_php_version,
+                PHP_VERSION
+            ),
+            'Plugin-Anforderungen nicht erfüllt',
+            array('back_link' => true)
         );
-        
-        // Core JavaScript
-        wp_enqueue_script(
-            'wettkampf-frontend-core',
-            WETTKAMPF_PLUGIN_URL . 'assets/js/frontend/frontend-core.js',
-            array('jquery'),
-            $cache_version,
-            true
-        );
-        
-        // Modal management
-        wp_enqueue_script(
-            'wettkampf-frontend-modals',
-            WETTKAMPF_PLUGIN_URL . 'assets/js/frontend/frontend-modals.js',
-            array('wettkampf-frontend-core'),
-            $cache_version,
-            true
-        );
-        
-        // Form handling
-        wp_enqueue_script(
-            'wettkampf-frontend-forms',
-            WETTKAMPF_PLUGIN_URL . 'assets/js/frontend/frontend-forms.js',
-            array('wettkampf-frontend-core'),
-            $cache_version,
-            true
-        );
-        
-        // AJAX requests
-        wp_enqueue_script(
-            'wettkampf-frontend-ajax',
-            WETTKAMPF_PLUGIN_URL . 'assets/js/frontend/frontend-ajax.js',
-            array('wettkampf-frontend-core'),
-            $cache_version,
-            true
-        );
-        
-        // reCAPTCHA
-        $recaptcha_site_key = get_option('wettkampf_recaptcha_site_key');
-        if (!empty($recaptcha_site_key)) {
-            wp_enqueue_script('recaptcha', 'https://www.google.com/recaptcha/api.js', array(), null, true);
-        }
-        
-        // Localize script
-        wp_localize_script('wettkampf-frontend-core', 'wettkampf_ajax', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('wettkampf_ajax')
-        ));
-    }
-    
-    /**
-     * Initialize cron jobs
-     */
-    private function init_cron_jobs() {
-        $cron = new WettkampfCron();
-        $cron->init();
-    }
-    
-    /**
-     * Check for database updates
-     */
-    public function check_database_updates() {
-        $current_version = get_option('wettkampf_db_version', '1.0.0');
-        
-        if (version_compare($current_version, WETTKAMPF_DB_VERSION, '<')) {
-            $this->run_database_updates($current_version);
-            update_option('wettkampf_db_version', WETTKAMPF_DB_VERSION);
-        }
-    }
-    
-    /**
-     * Run database updates
-     */
-    private function run_database_updates($from_version) {
-        if (version_compare($from_version, '1.1.0', '<')) {
-            $this->update_database_to_1_1_0();
-        }
-        
-        if (version_compare($from_version, '1.2.0', '<')) {
-            $this->update_database_to_1_2_0();
-        }
-    }
-    
-    /**
-     * Update database to version 1.1.0 - Add kategorie column
-     */
-    private function update_database_to_1_1_0() {
-        global $wpdb;
-        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
-        
-        $column_exists = $wpdb->get_results($wpdb->prepare("
-            SELECT COLUMN_NAME 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE table_name = %s 
-            AND column_name = 'kategorie'
-            AND table_schema = %s
-        ", $table_disziplinen, DB_NAME));
-        
-        if (empty($column_exists)) {
-            $wpdb->query("ALTER TABLE $table_disziplinen ADD COLUMN kategorie varchar(20) DEFAULT 'Alle' AFTER beschreibung");
-            $wpdb->query("ALTER TABLE $table_disziplinen ADD INDEX idx_kategorie (kategorie)");
-            $wpdb->query("UPDATE $table_disziplinen SET kategorie = 'Alle' WHERE kategorie IS NULL OR kategorie = ''");
-        }
-    }
-    
-    /**
-     * Update database to version 1.2.0 - Future updates
-     */
-    private function update_database_to_1_2_0() {
-        // Future database updates will go here
-    }
-    
-    /**
-     * Run the plugin
-     */
-    public function run() {
-        // Plugin is ready to run
-    }
-    
-    /**
-     * Get plugin version
-     */
-    public function get_version() {
-        return $this->version;
     }
 }
+
+/**
+ * Initialize the plugin
+ */
+function wettkampf_manager_init() {
+    // Check requirements first
+    wettkampf_manager_check_requirements();
+    
+    // Load core classes
+    require_once WETTKAMPF_PLUGIN_PATH . 'includes/core/class-wettkampf-manager.php';
+    
+    // Run the plugin
+    $plugin = new WettkampfManager();
+    $plugin->run();
+}
+
+/**
+ * Start the plugin on plugins_loaded hook
+ */
+add_action('plugins_loaded', 'wettkampf_manager_init');
+
+/**
+ * Add action links to plugin page
+ */
+function wettkampf_manager_action_links($links) {
+    $settings_link = '<a href="' . admin_url('admin.php?page=wettkampf-settings') . '">Einstellungen</a>';
+    $docs_link = '<a href="' . admin_url('admin.php?page=wettkampf-manager') . '">Wettkämpfe</a>';
+    
+    array_unshift($links, $settings_link, $docs_link);
+    
+    return $links;
+}
+add_filter('plugin_action_links_' . WETTKAMPF_PLUGIN_BASENAME, 'wettkampf_manager_action_links');
+
+/**
+ * Add meta links to plugin page
+ */
+function wettkampf_manager_meta_links($links, $file) {
+    if ($file === WETTKAMPF_PLUGIN_BASENAME) {
+        $links[] = '<a href="https://github.com/dein-username/wettkampf-manager" target="_blank">GitHub</a>';
+        $links[] = '<a href="https://github.com/dein-username/wettkampf-manager/issues" target="_blank">Support</a>';
+        $links[] = '<a href="https://github.com/dein-username/wettkampf-manager/wiki" target="_blank">Dokumentation</a>';
+    }
+    
+    return $links;
+}
+add_filter('plugin_row_meta', 'wettkampf_manager_meta_links', 10, 2);
+
+/**
+ * Display admin notice if plugin requirements are not met
+ */
+function wettkampf_manager_admin_notice() {
+    if (!current_user_can('activate_plugins')) {
+        return;
+    }
+    
+    // Check if we're on the plugins page and this plugin was just activated
+    $screen = get_current_screen();
+    if ($screen && $screen->id === 'plugins' && isset($_GET['activate'])) {
+        echo '<div class="notice notice-success is-dismissible">';
+        echo '<p><strong>Wettkampf Manager aktiviert!</strong> ';
+        echo 'Du kannst jetzt <a href="' . admin_url('admin.php?page=wettkampf-manager') . '">Wettkämpfe verwalten</a> ';
+        echo 'oder das <a href="' . admin_url('admin.php?page=wettkampf-settings') . '">Plugin konfigurieren</a>.</p>';
+        echo '</div>';
+    }
+}
+add_action('admin_notices', 'wettkampf_manager_admin_notice');
+
+/**
+ * Handle plugin uninstall
+ */
+if (!function_exists('wettkampf_manager_uninstall')) {
+    function wettkampf_manager_uninstall() {
+        // This will be handled by uninstall.php
+    }
+}
+
+/**
+ * Add custom cron schedules
+ */
+function wettkampf_manager_cron_schedules($schedules) {
+    $schedules['wettkampf_hourly'] = array(
+        'interval' => HOUR_IN_SECONDS,
+        'display'  => 'Jede Stunde (Wettkampf)'
+    );
+    
+    return $schedules;
+}
+add_filter('cron_schedules', 'wettkampf_manager_cron_schedules');
+
+/**
+ * Debug information for troubleshooting
+ */
+if (defined('WP_DEBUG') && WP_DEBUG) {
+    function wettkampf_manager_debug_info() {
+        if (current_user_can('manage_options')) {
+            error_log('Wettkampf Manager: Plugin loaded successfully');
+            error_log('Wettkampf Manager: Version ' . WETTKAMPF_VERSION);
+            error_log('Wettkampf Manager: Path ' . WETTKAMPF_PLUGIN_PATH);
+        }
+    }
+    add_action('init', 'wettkampf_manager_debug_info');
+}
+
+// End of file
