@@ -99,72 +99,86 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // FIXED: Toggle Disziplinen für Teilnehmer - bessere Event-Delegation
-    $(document).on('click', '.show-disziplinen-button', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
+    // KOMPLETT ÜBERARBEITETER Disziplinen Toggle - FINALE VERSION
+    let disziplinenToggleInProgress = false;
+    
+    function toggleDisziplinen(anmeldungId, button) {
+        // Verhindere mehrfache gleichzeitige Ausführung
+        if (disziplinenToggleInProgress) {
+            console.log('Toggle already in progress, skipping');
+            return false;
+        }
         
-        const anmeldungId = $(this).data('anmeldung-id');
+        disziplinenToggleInProgress = true;
+        
         const disziplinenDiv = $('#disziplinen-' + anmeldungId);
-        const button = $(this);
         
-        console.log('Disziplinen toggle clicked for anmeldung:', anmeldungId);
-        console.log('Button element:', button);
+        console.log('Toggling disziplinen for anmeldung:', anmeldungId);
         console.log('Disziplinen div found:', disziplinenDiv.length);
         console.log('Current visibility:', disziplinenDiv.is(':visible'));
         
-        // Fallback falls das Disziplinen-Div nicht gefunden wird
         if (disziplinenDiv.length === 0) {
             console.warn('Disziplinen div not found for anmeldung:', anmeldungId);
-            return;
+            disziplinenToggleInProgress = false;
+            return false;
         }
         
+        // Erst alle anderen schließen (außer der aktuellen)
+        $('.teilnehmer-disziplinen:visible').each(function() {
+            if ($(this).attr('id') !== 'disziplinen-' + anmeldungId) {
+                $(this).slideUp(150);
+            }
+        });
+        $('.show-disziplinen-button').not(button).removeClass('active').attr('title', 'Disziplinen anzeigen');
+        
+        // Dann diese ein/ausklappen
         if (disziplinenDiv.is(':visible')) {
-            disziplinenDiv.slideUp(200);
-            button.text('📋');
-            button.attr('title', 'Disziplinen anzeigen');
+            disziplinenDiv.slideUp(150, function() {
+                disziplinenToggleInProgress = false;
+            });
+            button.removeClass('active').attr('title', 'Disziplinen anzeigen');
             console.log('Hiding disziplinen for:', anmeldungId);
         } else {
-            // Erst alle anderen schließen
-            $('.teilnehmer-disziplinen:visible').slideUp(200);
-            $('.show-disziplinen-button').text('📋').attr('title', 'Disziplinen anzeigen');
-            
-            // Dann diese öffnen
-            disziplinenDiv.slideDown(200);
-            button.text('📋');
-            button.attr('title', 'Disziplinen ausblenden');
+            disziplinenDiv.slideDown(150, function() {
+                disziplinenToggleInProgress = false;
+            });
+            button.addClass('active').attr('title', 'Disziplinen ausblenden');
             console.log('Showing disziplinen for:', anmeldungId);
         }
+        
+        return false;
+    }
+    
+    // EINZELNER Event-Handler für Disziplinen Toggle
+    $(document).on('click', '.show-disziplinen-button', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        const anmeldungId = $(this).data('anmeldung-id');
+        const button = $(this);
+        
+        console.log('Disziplinen button clicked for anmeldung:', anmeldungId);
+        
+        return toggleDisziplinen(anmeldungId, button);
     });
     
-    // ZUSÄTZLICHER FIX: Alternative Event-Handler für Desktop-spezifische Issues
-    $(document).on('mousedown touchstart', '.show-disziplinen-button', function(e) {
-        // Backup handler für den Fall dass click nicht funktioniert
-        const originalHandler = $(this).data('backup-handler-executed');
-        if (originalHandler) {
-            return; // Verhindere doppelte Ausführung
-        }
-        
-        $(this).data('backup-handler-executed', true);
-        
-        // Reset nach kurzer Zeit
-        setTimeout(() => {
-            $(this).removeData('backup-handler-executed');
-        }, 500);
-        
-        // Trigger den ursprünglichen Handler
-        $(this).trigger('click');
-    });
-    
-    // DEBUG: Event-Handler für alle Clicks auf Teilnehmer-Items
+    // VERHINDERE Event-Bubbling auf dem Parent-Element
     $(document).on('click', '.teilnehmer-item', function(e) {
-        console.log('Click on teilnehmer-item detected');
-        console.log('Target element:', e.target);
-        console.log('Has show-disziplinen-button class:', $(e.target).hasClass('show-disziplinen-button'));
-        
-        // Prüfe ob der Klick auf das Disziplinen-Button war
-        if ($(e.target).hasClass('show-disziplinen-button')) {
-            console.log('Click was on disziplinen button');
+        // Wenn der Klick auf dem Disziplinen-Button war, verhindere weitere Verarbeitung
+        if ($(e.target).hasClass('show-disziplinen-button') || 
+            $(e.target).closest('.show-disziplinen-button').length > 0) {
+            e.stopPropagation();
+            e.preventDefault();
+            return false;
+        }
+    });
+    
+    // VERHINDERE Event-Bubbling auf Actions Container
+    $(document).on('click', '.teilnehmer-actions', function(e) {
+        // Stoppe Bubbling für alle Button-Clicks in Actions
+        if ($(e.target).is('button') || $(e.target).closest('button').length > 0) {
+            e.stopPropagation();
         }
     });
     
@@ -214,7 +228,10 @@ jQuery(document).ready(function($) {
     });
     
     // Open mutation modal - FIXED with event delegation
-    $(document).on('click', '.edit-anmeldung', function() {
+    $(document).on('click', '.edit-anmeldung', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
         const anmeldungId = $(this).data('anmeldung-id');
         console.log('Edit button clicked for anmeldung:', anmeldungId);
         $('#mutation_anmeldung_id').val(anmeldungId);
@@ -227,7 +244,10 @@ jQuery(document).ready(function($) {
     });
     
     // Open view-only modal - FIXED with event delegation
-    $(document).on('click', '.view-anmeldung', function() {
+    $(document).on('click', '.view-anmeldung', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
         const anmeldungId = $(this).data('anmeldung-id');
         console.log('View button clicked for anmeldung:', anmeldungId);
         $('#view_anmeldung_id').val(anmeldungId);
@@ -942,7 +962,7 @@ jQuery(document).ready(function($) {
                 anmeldungModal.hide();
                 clearMessages();
             }
-            if (mutationModal.is(':visible')) {
+            if (mutationModal.is(':visible') ) {
                 mutationModal.hide();
                 clearMessages();
             }
@@ -972,5 +992,5 @@ jQuery(document).ready(function($) {
         }, 100);
     });
     
-    console.log('Wettkampf Frontend JS with FIXED Disziplinen Toggle and corrected Categories (U10, U12, U14, U16, U18) loaded successfully');
+    console.log('Wettkampf Frontend JS with FINAL Cross-Platform Disziplinen Toggle Fix loaded successfully');
 });

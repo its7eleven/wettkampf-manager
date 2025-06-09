@@ -78,156 +78,6 @@ class WettkampfFrontend {
                                 // Disziplinen für den Wettkampf anzeigen - GRUPPIERT nach Kategorien
                                 $table_zuordnung = $wpdb->prefix . 'wettkampf_disziplin_zuordnung';
                                 $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
-        
-        $query = "
-            SELECT d.* 
-            FROM $table_zuordnung z 
-            JOIN $table_disziplinen d ON z.disziplin_id = d.id 
-            WHERE z.wettkampf_id = %d AND d.aktiv = 1
-        ";
-        
-        $params = array($wettkampf_id);
-        
-        // Wenn Jahrgang angegeben, nach Kategorie filtern
-        if ($jahrgang) {
-            $userCategory = $this->calculateAgeCategory($jahrgang);
-            $query .= " AND (d.kategorie = %s OR d.kategorie = 'Alle')";
-            $params[] = $userCategory;
-        }
-        
-        $query .= " ORDER BY d.sortierung ASC, d.name ASC";
-        
-        $disziplinen = $wpdb->get_results($wpdb->prepare($query, $params));
-        
-        wp_die(json_encode(array(
-            'success' => true, 
-            'data' => $disziplinen,
-            'user_category' => $jahrgang ? $this->calculateAgeCategory($jahrgang) : null
-        )));
-    }
-
-    // Hilfsfunktion für Alterskategorie-Berechnung (Frontend) - KORRIGIERT
-    private function calculateAgeCategory($jahrgang, $currentYear = null) {
-        if (!$currentYear) {
-            $currentYear = date('Y');
-        }
-        
-        $age = $currentYear - $jahrgang;
-        
-        // Nur diese 5 Kategorien verwenden, immer nächst passende wählen
-        if ($age < 10) return 'U10';  // Alle unter 10 Jahren → U10
-        if ($age < 12) return 'U12';  // 10-11 Jahre → U12
-        if ($age < 14) return 'U14';  // 12-13 Jahre → U14
-        if ($age < 16) return 'U16';  // 14-15 Jahre → U16
-        if ($age < 18) return 'U18';  // 16-17 Jahre → U18
-        
-        return 'U18'; // Alle 18+ Jahre bleiben in U18
-    }
-    
-    private function verify_recaptcha($response) {
-        $secret_key = get_option('wettkampf_recaptcha_secret_key');
-        if (empty($secret_key) || empty($response)) {
-            return true; // Skip verification if no key set or no response
-        }
-        
-        $url = 'https://www.google.com/recaptcha/api/siteverify';
-        $data = array(
-            'secret' => $secret_key,
-            'response' => $response,
-            'remoteip' => $_SERVER['REMOTE_ADDR']
-        );
-        
-        $response = wp_remote_post($url, array('body' => $data));
-        
-        if (is_wp_error($response)) {
-            return false;
-        }
-        
-        $body = wp_remote_retrieve_body($response);
-        $result = json_decode($body, true);
-        
-        return isset($result['success']) && $result['success'] === true;
-    }
-    
-    private function send_confirmation_email($anmeldung_id) {
-        global $wpdb;
-        $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
-        $table_wettkampf = $wpdb->prefix . 'wettkampf';
-        
-        $anmeldung = $wpdb->get_row($wpdb->prepare("
-            SELECT a.*, w.name as wettkampf_name, w.datum, w.ort, w.beschreibung, w.event_link
-            FROM $table_anmeldung a 
-            JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
-            WHERE a.id = %d
-        ", $anmeldung_id));
-        
-        if (!$anmeldung) return;
-        
-        // Disziplinen für die Anmeldung laden für E-Mail
-        $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
-        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
-        
-        $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
-            SELECT d.name 
-            FROM $table_anmeldung_disziplinen ad 
-            JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
-            WHERE ad.anmeldung_id = %d 
-            ORDER BY d.sortierung ASC, d.name ASC
-        ", $anmeldung_id));
-        
-        // E-Mail Inhalt erstellen
-        $subject = 'Anmeldebestätigung: ' . $anmeldung->wettkampf_name;
-        
-        $message = "Hallo " . $anmeldung->vorname . ",\n\n";
-        $message .= "deine Anmeldung für den Wettkampf wurde erfolgreich registriert.\n\n";
-        $message .= "Wettkampf: " . $anmeldung->wettkampf_name . "\n";
-        $message .= "Datum: " . date('d.m.Y', strtotime($anmeldung->datum)) . "\n";
-        $message .= "Ort: " . $anmeldung->ort . "\n\n";
-        
-        $message .= "Deine Anmeldedaten:\n";
-        $message .= "Name: " . $anmeldung->vorname . " " . $anmeldung->name . "\n";
-        $message .= "E-Mail: " . $anmeldung->email . "\n";
-        $message .= "Geschlecht: " . $anmeldung->geschlecht . "\n";
-        $message .= "Jahrgang: " . $anmeldung->jahrgang . "\n";
-        $message .= "Kategorie: " . $this->calculateAgeCategory($anmeldung->jahrgang) . "\n";
-        $message .= "Eltern können fahren: " . ($anmeldung->eltern_fahren ? 'Ja (' . $anmeldung->freie_plaetze . ' Plätze)' : 'Nein') . "\n";
-        
-        if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
-            $disziplin_names = array();
-            foreach ($anmeldung_disziplinen as $d) {
-                if (is_object($d) && isset($d->name) && !empty($d->name)) {
-                    $disziplin_names[] = $d->name;
-                }
-            }
-            if (!empty($disziplin_names)) {
-                $message .= "Disziplinen: " . implode(', ', $disziplin_names) . "\n";
-            }
-        }
-        $message .= "\n";
-        
-        if ($anmeldung->beschreibung) {
-            $message .= "Beschreibung:\n" . $anmeldung->beschreibung . "\n\n";
-        }
-        
-        if ($anmeldung->event_link) {
-            $message .= "Weitere Informationen: " . $anmeldung->event_link . "\n\n";
-        }
-        
-        $message .= "Du kannst deine Anmeldung jederzeit auf unserer Website bearbeiten oder abmelden.\n";
-        $message .= "Klicke dazu einfach auf den Bleistift neben deinem Namen in der Teilnehmerliste.\n\n";
-        $message .= "Viel Erfolg beim Wettkampf!\n";
-        
-        $sender_email = get_option('wettkampf_sender_email', get_option('admin_email'));
-        $sender_name = get_option('wettkampf_sender_name', get_option('blogname'));
-        
-        $headers = array(
-            'Content-Type: text/plain; charset=UTF-8',
-            'From: ' . $sender_name . ' <' . $sender_email . '>'
-        );
-        
-        wp_mail($anmeldung->email, $subject, $message, $headers);
-    }
-}disziplinen';
                                 $wettkampf_disziplinen = $wpdb->get_results($wpdb->prepare("
                                     SELECT d.name, d.beschreibung, d.kategorie 
                                     FROM $table_zuordnung z 
@@ -318,6 +168,8 @@ class WettkampfFrontend {
                                                     <?php echo esc_html($anmeldung->vorname . ' ' . $anmeldung->name); ?>
                                                     <small style="color: #6b7280; margin-left: 5px;">(<?php echo esc_html($user_category); ?>)</small>
                                                 </span>
+                                            </div>
+                                            <div class="teilnehmer-actions">
                                                 <!-- FIXED: Disziplinen Button mit verbesserter HTML-Struktur -->
                                                 <button 
                                                     type="button"
@@ -327,8 +179,7 @@ class WettkampfFrontend {
                                                     aria-label="Disziplinen für <?php echo esc_attr($anmeldung->vorname . ' ' . $anmeldung->name); ?> anzeigen"
                                                     tabindex="0"
                                                 >📋</button>
-                                            </div>
-                                            <div class="teilnehmer-actions">
+                                                
                                                 <?php 
                                                 $anmeldeschluss_passed = strtotime($wettkampf->anmeldeschluss) < strtotime('today');
                                                 if (!$anmeldeschluss_passed): 
@@ -452,7 +303,6 @@ class WettkampfFrontend {
                             <option value="">Bitte wählen</option>
                             <option value="männlich">Männlich</option>
                             <option value="weiblich">Weiblich</option>
-                            <option value="divers">Divers</option>
                         </select>
                     </div>
                     
@@ -553,7 +403,6 @@ class WettkampfFrontend {
                         <select id="edit_geschlecht" name="geschlecht" required>
                             <option value="männlich">Männlich</option>
                             <option value="weiblich">Weiblich</option>
-                            <option value="divers">Divers</option>
                         </select>
                     </div>
                     
@@ -894,4 +743,155 @@ class WettkampfFrontend {
         
         // Disziplinen für den Wettkampf laden
         $table_zuordnung = $wpdb->prefix . 'wettkampf_disziplin_zuordnung';
-        $table_disziplinen = $wpdb->prefix . 'wettkampf_
+        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
+
+        $query = "
+            SELECT d.* 
+            FROM $table_zuordnung z 
+            JOIN $table_disziplinen d ON z.disziplin_id = d.id 
+            WHERE z.wettkampf_id = %d AND d.aktiv = 1
+        ";
+        
+        $params = array($wettkampf_id);
+        
+        // Wenn Jahrgang angegeben, nach Kategorie filtern
+        if ($jahrgang) {
+            $userCategory = $this->calculateAgeCategory($jahrgang);
+            $query .= " AND (d.kategorie = %s OR d.kategorie = 'Alle')";
+            $params[] = $userCategory;
+        }
+        
+        $query .= " ORDER BY d.sortierung ASC, d.name ASC";
+        
+        $disziplinen = $wpdb->get_results($wpdb->prepare($query, $params));
+        
+        wp_die(json_encode(array(
+            'success' => true, 
+            'data' => $disziplinen,
+            'user_category' => $jahrgang ? $this->calculateAgeCategory($jahrgang) : null
+        )));
+    }
+
+    // Hilfsfunktion für Alterskategorie-Berechnung (Frontend) - KORRIGIERT
+    private function calculateAgeCategory($jahrgang, $currentYear = null) {
+        if (!$currentYear) {
+            $currentYear = date('Y');
+        }
+        
+        $age = $currentYear - $jahrgang;
+        
+        // Nur diese 5 Kategorien verwenden, immer nächst passende wählen
+        if ($age < 10) return 'U10';  // Alle unter 10 Jahren → U10
+        if ($age < 12) return 'U12';  // 10-11 Jahre → U12
+        if ($age < 14) return 'U14';  // 12-13 Jahre → U14
+        if ($age < 16) return 'U16';  // 14-15 Jahre → U16
+        if ($age < 18) return 'U18';  // 16-17 Jahre → U18
+        
+        return 'U18'; // Alle 18+ Jahre bleiben in U18
+    }
+    
+    private function verify_recaptcha($response) {
+        $secret_key = get_option('wettkampf_recaptcha_secret_key');
+        if (empty($secret_key) || empty($response)) {
+            return true; // Skip verification if no key set or no response
+        }
+        
+        $url = 'https://www.google.com/recaptcha/api/siteverify';
+        $data = array(
+            'secret' => $secret_key,
+            'response' => $response,
+            'remoteip' => $_SERVER['REMOTE_ADDR']
+        );
+        
+        $response = wp_remote_post($url, array('body' => $data));
+        
+        if (is_wp_error($response)) {
+            return false;
+        }
+        
+        $body = wp_remote_retrieve_body($response);
+        $result = json_decode($body, true);
+        
+        return isset($result['success']) && $result['success'] === true;
+    }
+    
+    private function send_confirmation_email($anmeldung_id) {
+        global $wpdb;
+        $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
+        $table_wettkampf = $wpdb->prefix . 'wettkampf';
+        
+        $anmeldung = $wpdb->get_row($wpdb->prepare("
+            SELECT a.*, w.name as wettkampf_name, w.datum, w.ort, w.beschreibung, w.event_link
+            FROM $table_anmeldung a 
+            JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
+            WHERE a.id = %d
+        ", $anmeldung_id));
+        
+        if (!$anmeldung) return;
+        
+        // Disziplinen für die Anmeldung laden für E-Mail
+        $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
+        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
+        
+        $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
+            SELECT d.name 
+            FROM $table_anmeldung_disziplinen ad 
+            JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
+            WHERE ad.anmeldung_id = %d 
+            ORDER BY d.sortierung ASC, d.name ASC
+        ", $anmeldung_id));
+        
+        // E-Mail Inhalt erstellen
+        $subject = 'Anmeldebestätigung: ' . $anmeldung->wettkampf_name;
+        
+        $message = "Hallo " . $anmeldung->vorname . ",\n\n";
+        $message .= "deine Anmeldung für den Wettkampf wurde erfolgreich registriert.\n\n";
+        $message .= "Wettkampf: " . $anmeldung->wettkampf_name . "\n";
+        $message .= "Datum: " . date('d.m.Y', strtotime($anmeldung->datum)) . "\n";
+        $message .= "Ort: " . $anmeldung->ort . "\n\n";
+        
+        $message .= "Deine Anmeldedaten:\n";
+        $message .= "Name: " . $anmeldung->vorname . " " . $anmeldung->name . "\n";
+        $message .= "E-Mail: " . $anmeldung->email . "\n";
+        $message .= "Geschlecht: " . $anmeldung->geschlecht . "\n";
+        $message .= "Jahrgang: " . $anmeldung->jahrgang . "\n";
+        $message .= "Kategorie: " . $this->calculateAgeCategory($anmeldung->jahrgang) . "\n";
+        $message .= "Eltern können fahren: " . ($anmeldung->eltern_fahren ? 'Ja (' . $anmeldung->freie_plaetze . ' Plätze)' : 'Nein') . "\n";
+        
+        if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
+            $disziplin_names = array();
+            foreach ($anmeldung_disziplinen as $d) {
+                if (is_object($d) && isset($d->name) && !empty($d->name)) {
+                    $disziplin_names[] = $d->name;
+                }
+            }
+            if (!empty($disziplin_names)) {
+                $message .= "Disziplinen: " . implode(', ', $disziplin_names) . "\n";
+            }
+        }
+        $message .= "\n";
+        
+        if ($anmeldung->beschreibung) {
+            $message .= "Beschreibung:\n" . $anmeldung->beschreibung . "\n\n";
+        }
+        
+        if ($anmeldung->event_link) {
+            $message .= "Weitere Informationen: " . $anmeldung->event_link . "\n\n";
+        }
+        
+        $message .= "Du kannst deine Anmeldung jederzeit auf unserer Website bearbeiten oder abmelden.\n";
+        $message .= "Klicke dazu einfach auf den Bleistift neben deinem Namen in der Teilnehmerliste.\n\n";
+        $message .= "Viel Erfolg beim Wettkampf!\n";
+        
+        $sender_email = get_option('wettkampf_sender_email', get_option('admin_email'));
+        $sender_name = get_option('wettkampf_sender_name', get_option('blogname'));
+        
+        $headers = array(
+            'Content-Type: text/plain; charset=UTF-8',
+            'From: ' . $sender_name . ' <' . $sender_email . '>'
+        );
+        
+        wp_mail($anmeldung->email, $subject, $message, $headers);
+    }
+}
+                    

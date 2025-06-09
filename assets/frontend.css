@@ -91,10 +91,7 @@
     color: #374151;
     font-size: 0.95rem;
     font-weight: 500;
-    background: #f8fafc;
     padding: 5px 10px;
-    border-radius: 5px;
-    border: 1px solid #e5e7eb;
 }
 
 .lizenziert-badge {
@@ -303,7 +300,7 @@
 
 /* FIXED: Disziplinen Button Styling - Bessere Klickbarkeit */
 .show-disziplinen-button {
-    background: #e5e7eb !important;
+    background: #ffffff !important;
     border: 1px solid #d1d5db !important;
     cursor: pointer !important;
     font-size: 12px !important;
@@ -350,8 +347,8 @@
 }
 
 .edit-anmeldung {
-    background: #f59e0b !important;
-    border: 1px solid #d97706 !important;
+    background: #e5e5e5 !important;
+    border: 1px solid #e5e5e5 !important;
     cursor: pointer !important;
     font-size: 12px !important;
     padding: 6px 8px !important;
@@ -373,16 +370,16 @@
 }
 
 .edit-anmeldung:hover {
-    background: #d97706 !important;
-    border-color: #b45309 !important;
+    background: #d7d7d7 !important;
+    border-color: #d7d7d7 !important;
     transform: scale(1.1) !important;
     color: white !important;
     text-decoration: none !important;
 }
 
 .view-anmeldung {
-    background: #6b7280 !important;
-    border: 1px solid #4b5563 !important;
+    background: #f59e0b !important;
+    border: 1px solid #d97706 !important;
     cursor: pointer !important;
     font-size: 12px !important;
     padding: 6px 8px !important;
@@ -414,8 +411,8 @@
 /* FIXED: Disziplinen Display - Bessere Sichtbarkeit */
 .teilnehmer-disziplinen {
     display: none;
-    margin-left: 20px;
-    margin-top: 8px;
+    margin-left: 0;
+    margin-top: 0;
     padding: 10px 12px;
     background: #f8fafc;
     border-radius: 6px;
@@ -993,8 +990,8 @@
 /* Dark Mode Support (falls Theme es unterstützt) */
 @media (prefers-color-scheme: dark) {
     .teilnehmer-disziplinen {
-        background: #1f2937;
-        border-color: #374151;
+        background: #f5f5f5;
+        border-color: #c9cbd1;
         color: #e5e7eb;
     }
     
