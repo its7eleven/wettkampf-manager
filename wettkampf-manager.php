@@ -468,4 +468,130 @@ class WettkampfManager {
     /**
      * Generate CSV export content for automatic emails
      */
-    private function generate
+    private function generate_csv_export($wettkampf_id) {
+        global $wpdb;
+        
+        $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
+        $table_wettkampf = $wpdb->prefix . 'wettkampf';
+        $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
+        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
+        
+        // Get competition info
+        $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_wettkampf WHERE id = %d", $wettkampf_id));
+        if (!$wettkampf) {
+            return false;
+        }
+        
+        // Get registrations
+        $anmeldungen = $wpdb->get_results($wpdb->prepare("
+            SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
+            FROM $table_anmeldung a 
+            JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
+            WHERE a.wettkampf_id = %d
+            ORDER BY a.anmeldedatum ASC
+        ", $wettkampf_id));
+        
+        // Start output buffering
+        ob_start();
+        
+        // Output UTF-8 BOM for proper encoding
+        echo "\xEF\xBB\xBF";
+        
+        // CSV headers
+        $headers = array(
+            'Vorname', 'Name', 'E-Mail', 'Geschlecht', 'Jahrgang', 'Kategorie',
+            'Wettkampf', 'Wettkampf Datum', 'Wettkampf Ort', 'Eltern fahren',
+            'Freie Plätze', 'Disziplinen', 'Anmeldedatum'
+        );
+        
+        // Output headers
+        echo implode(';', $headers) . "\r\n";
+        
+        // Output data
+        foreach ($anmeldungen as $anmeldung) {
+            // Load disciplines for this registration
+            $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
+                SELECT d.name 
+                FROM $table_anmeldung_disziplinen ad 
+                JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
+                WHERE ad.anmeldung_id = %d 
+                ORDER BY d.sortierung ASC, d.name ASC
+            ", $anmeldung->id));
+            
+            $disziplin_names = array();
+            if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
+                foreach ($anmeldung_disziplinen as $d) {
+                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
+                        $disziplin_names[] = $d->name;
+                    }
+                }
+            }
+            
+            $user_category = $this->calculateAgeCategory($anmeldung->jahrgang);
+            
+            $row = array(
+                $this->csv_escape($anmeldung->vorname),
+                $this->csv_escape($anmeldung->name),
+                $this->csv_escape($anmeldung->email),
+                $this->csv_escape($anmeldung->geschlecht),
+                $anmeldung->jahrgang,
+                $this->csv_escape($user_category),
+                $this->csv_escape($anmeldung->wettkampf_name),
+                date('d.m.Y', strtotime($anmeldung->wettkampf_datum)),
+                $this->csv_escape($anmeldung->wettkampf_ort),
+                $anmeldung->eltern_fahren ? 'Ja' : 'Nein',
+                $anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '',
+                $this->csv_escape(!empty($disziplin_names) ? implode(', ', $disziplin_names) : ''),
+                date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum))
+            );
+            
+            echo implode(';', $row) . "\r\n";
+        }
+        
+        return ob_get_clean();
+    }
+
+    /**
+     * Helper function to escape CSV values
+     */
+    private function csv_escape($value) {
+        // Convert to string and trim
+        $value = trim((string)$value);
+        
+        // If value contains semicolon, comma, quotes, or newlines, wrap in quotes and escape internal quotes
+        if (strpos($value, ';') !== false || 
+            strpos($value, ',') !== false || 
+            strpos($value, '"') !== false || 
+            strpos($value, "\n") !== false || 
+            strpos($value, "\r") !== false) {
+            $value = '"' . str_replace('"', '""', $value) . '"';
+        }
+        
+        return $value;
+    }
+
+    /**
+     * Sanitize filename for email attachments
+     */
+    private function sanitize_filename_for_email($filename) {
+        // Remove/replace problematic characters for email attachments
+        $filename = preg_replace('/[^a-zA-Z0-9äöüÄÖÜß_-]/', '_', $filename);
+        $filename = preg_replace('/_{2,}/', '_', $filename); // Remove multiple underscores
+        $filename = trim($filename, '_');
+        
+        // Limit length
+        if (strlen($filename) > 40) {
+            $filename = substr($filename, 0, 40);
+        }
+        
+        // Ensure we have something
+        if (empty($filename)) {
+            $filename = 'wettkampf';
+        }
+        
+        return $filename;
+    }
+}
+
+// Initialize the plugin
+new WettkampfManager();
