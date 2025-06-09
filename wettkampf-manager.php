@@ -356,7 +356,7 @@ class WettkampfManager {
     }
     
     /**
-     * Check for expired registrations and send Excel exports
+     * Check for expired registrations and send CSV exports
      */
     public function check_expired_registrations() {
         global $wpdb;
@@ -400,7 +400,7 @@ class WettkampfManager {
     }
     
     /**
-     * Send automatic Excel export for a competition
+     * Send automatic CSV export for a competition
      */
     public function send_automatic_export($wettkampf) {
         global $wpdb;
@@ -411,20 +411,21 @@ class WettkampfManager {
             return;
         }
         
-        // Generate Excel file
-        $excel_content = $this->generate_excel_export($wettkampf->id);
+        // Generate CSV content (more reliable than Excel for email attachments)
+        $csv_content = $this->generate_csv_export($wettkampf->id);
         
-        if (!$excel_content) {
-            error_log('Wettkampf Manager: Failed to generate Excel export for competition ' . $wettkampf->id);
+        if (!$csv_content) {
+            error_log('Wettkampf Manager: Failed to generate CSV export for competition ' . $wettkampf->id);
             return;
         }
         
         // Create temporary file
         $upload_dir = wp_upload_dir();
-        $filename = sanitize_file_name($wettkampf->name) . '_anmeldungen_' . date('Y-m-d') . '.xls';
+        $safe_name = $this->sanitize_filename_for_email($wettkampf->name);
+        $filename = $safe_name . '_anmeldungen_' . date('Y-m-d') . '.csv';
         $temp_file = $upload_dir['path'] . '/' . $filename;
         
-        file_put_contents($temp_file, $excel_content);
+        file_put_contents($temp_file, $csv_content);
         
         // Send email
         $subject = 'Anmeldungen für ' . $wettkampf->name . ' (Anmeldeschluss abgelaufen)';
@@ -437,7 +438,9 @@ class WettkampfManager {
         $message .= "- Ort: " . $wettkampf->ort . "\n";
         $message .= "- Anmeldeschluss: " . date('d.m.Y', strtotime($wettkampf->anmeldeschluss)) . "\n";
         $message .= "- Anzahl Anmeldungen: " . $wettkampf->anmeldungen_count . "\n\n";
-        $message .= "Im Anhang findest du die Excel-Datei mit allen Anmeldungen.\n\n";
+        $message .= "Im Anhang findest du die CSV-Datei mit allen Anmeldungen.\n";
+        $message .= "Diese kann in Excel, LibreOffice oder jedem anderen Tabellenkalkulationsprogramm geöffnet werden.\n\n";
+        $message .= "Tipp: In Excel verwende 'Daten > Text in Spalten' mit Semikolon als Trennzeichen für beste Formatierung.\n\n";
         $message .= "Diese E-Mail wurde automatisch vom Wettkampf Manager generiert.\n";
         
         $sender_email = get_option('wettkampf_sender_email', get_option('admin_email'));
@@ -463,111 +466,6 @@ class WettkampfManager {
     }
     
     /**
-     * Generate Excel export content
+     * Generate CSV export content for automatic emails
      */
-    private function generate_excel_export($wettkampf_id) {
-        global $wpdb;
-        
-        $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
-        $table_wettkampf = $wpdb->prefix . 'wettkampf';
-        $table_anmeldung_disziplinen = $wpdb->prefix . 'wettkampf_anmeldung_disziplinen';
-        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
-        
-        // Get competition info
-        $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_wettkampf WHERE id = %d", $wettkampf_id));
-        if (!$wettkampf) {
-            return false;
-        }
-        
-        // Get registrations
-        $anmeldungen = $wpdb->get_results($wpdb->prepare("
-            SELECT a.*, w.name as wettkampf_name, w.datum as wettkampf_datum, w.ort as wettkampf_ort
-            FROM $table_anmeldung a 
-            JOIN $table_wettkampf w ON a.wettkampf_id = w.id 
-            WHERE a.wettkampf_id = %d
-            ORDER BY a.anmeldedatum ASC
-        ", $wettkampf_id));
-        
-        // Start output buffering
-        ob_start();
-        
-        // Output BOM for UTF-8
-        echo "\xEF\xBB\xBF";
-        
-        // HTML table for Excel
-        echo '<!DOCTYPE html>';
-        echo '<html>';
-        echo '<head>';
-        echo '<meta charset="UTF-8">';
-        echo '<title>Wettkampf Anmeldungen - ' . htmlspecialchars($wettkampf->name) . '</title>';
-        echo '</head>';
-        echo '<body>';
-        echo '<table border="1" style="border-collapse: collapse;">';
-        echo '<thead>';
-        echo '<tr style="background-color: #f0f0f0; font-weight: bold;">';
-        echo '<th>Vorname</th>';
-        echo '<th>Name</th>';
-        echo '<th>E-Mail</th>';
-        echo '<th>Geschlecht</th>';
-        echo '<th>Jahrgang</th>';
-        echo '<th>Kategorie</th>';
-        echo '<th>Wettkampf</th>';
-        echo '<th>Wettkampf Datum</th>';
-        echo '<th>Wettkampf Ort</th>';
-        echo '<th>Eltern fahren</th>';
-        echo '<th>Freie Plätze</th>';
-        echo '<th>Disziplinen</th>';
-        echo '<th>Anmeldedatum</th>';
-        echo '</tr>';
-        echo '</thead>';
-        echo '<tbody>';
-        
-        foreach ($anmeldungen as $anmeldung) {
-            // Load disciplines for this registration
-            $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
-                SELECT d.name 
-                FROM $table_anmeldung_disziplinen ad 
-                JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
-                WHERE ad.anmeldung_id = %d 
-                ORDER BY d.sortierung ASC, d.name ASC
-            ", $anmeldung->id));
-            
-            $disziplin_names = array();
-            if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
-                foreach ($anmeldung_disziplinen as $d) {
-                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
-                        $disziplin_names[] = $d->name;
-                    }
-                }
-            }
-            
-            $user_category = $this->calculateAgeCategory($anmeldung->jahrgang);
-            
-            echo '<tr>';
-            echo '<td>' . htmlspecialchars($anmeldung->vorname, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->name, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->email, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->geschlecht, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->jahrgang, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($user_category, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_name, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_ort, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . ($anmeldung->eltern_fahren ? 'Ja' : 'Nein') . '</td>';
-            echo '<td>' . ($anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '') . '</td>';
-            echo '<td>' . htmlspecialchars(!empty($disziplin_names) ? implode(', ', $disziplin_names) : '', ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum)) . '</td>';
-            echo '</tr>';
-        }
-        
-        echo '</tbody>';
-        echo '</table>';
-        echo '</body>';
-        echo '</html>';
-        
-        return ob_get_clean();
-    }
-}
-
-// Initialize the plugin
-new WettkampfManager();
+    private function generate

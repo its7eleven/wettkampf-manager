@@ -332,7 +332,8 @@ class WettkampfAdmin {
                     <li><strong>Zeitpunkt:</strong> 2 Stunden nach Mitternacht des Anmeldeschlusstages (02:00 Uhr)</li>
                     <li><strong>Bedingung:</strong> Nur Wettkämpfe mit mindestens einer Anmeldung</li>
                     <li><strong>Häufigkeit:</strong> Pro Wettkampf wird nur einmal ein Export versendet</li>
-                    <li><strong>Test:</strong> Mit "Test-Export" können Sie manuell einen Export senden</li>
+                    <li><strong>Test:</strong> Mit "Test-Export" kannst du manuell einen Export senden</li>
+                    <li><strong>Format:</strong> CSV-Dateien für beste Kompatibilität mit allen E-Mail-Clients</li>
                 </ul>
                 
                 <?php
@@ -600,7 +601,7 @@ class WettkampfAdmin {
                     <?php if (empty($disziplinen)): ?>
                         <tr>
                             <td colspan="6" style="text-align: center; color: #666; font-style: italic;">
-                                Keine Disziplinen vorhanden. Erstellen Sie die erste Disziplin mit dem Formular oben.
+                                Keine Disziplinen vorhanden. Erstelle die erste Disziplin mit dem Formular oben.
                             </td>
                         </tr>
                     <?php else: ?>
@@ -670,7 +671,6 @@ class WettkampfAdmin {
         <?php
     }
     
-    // Anmeldungen und andere Methoden bleiben gleich wie vorher...
     public function admin_anmeldungen() {
         global $wpdb;
         
@@ -965,8 +965,22 @@ class WettkampfAdmin {
                     
                     <div class="export-buttons">
                         <a href="?page=wettkampf-anmeldungen&export=xlsx&wettkampf_id=<?php echo $wettkampf_filter; ?>&search=<?php echo urlencode($search); ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
-                           class="export-button xlsx">📋 Excel Export</a>
+                           class="export-button xlsx" 
+                           title="Excel/CSV Export - automatisch optimiert für dein Gerät">
+                            📋 Export
+                            <small style="display: block; font-size: 10px; opacity: 0.8; margin-top: 2px;">
+                                Desktop: Excel | Mobile: CSV
+                            </small>
+                        </a>
                     </div>
+                </div>
+                
+                <div style="margin-top: 15px; padding: 12px; background: #f0f6fc; border-radius: 5px; border-left: 4px solid #3b82f6;">
+                    <p style="margin: 0; font-size: 13px; color: #374151;">
+                        <strong>📱 Export-Info:</strong> 
+                        Auf Desktop-Geräten wird eine Excel-Datei (.xls) erstellt, auf mobilen Geräten eine CSV-Datei für bessere Kompatibilität. 
+                        CSV-Dateien können in Excel mit "Daten → Text in Spalten" und Semikolon als Trennzeichen optimal formatiert werden.
+                    </p>
                 </div>
             </div>
             
@@ -1079,20 +1093,91 @@ class WettkampfAdmin {
                 <ul>
                     <li><strong>Kategorien:</strong> Werden automatisch basierend auf dem Jahrgang berechnet (Alter im aktuellen Jahr)</li>
                     <li><strong>Disziplinen:</strong> Beim Bearbeiten werden nur Disziplinen der entsprechenden Kategorie angezeigt</li>
-                    <li><strong>Filter:</strong> Verwenden Sie die Dropdown-Filter um spezifische Wettkämpfe oder Suchbegriffe zu finden</li>
-                    <li><strong>Excel Export:</strong> Exportiert alle gefilterten Anmeldungen als Excel-Datei</li>
+                    <li><strong>Filter:</strong> Verwende die Dropdown-Filter um spezifische Wettkämpfe oder Suchbegriffe zu finden</li>
+                    <li><strong>Export:</strong> Exportiert alle gefilterten Anmeldungen als Excel/CSV-Datei (automatisch optimiert für dein Gerät)</li>
                     <li><strong>Löschen:</strong> Beim Löschen werden auch alle Disziplin-Zuordnungen entfernt</li>
                 </ul>
             </div>
         </div>
+        
+        <style>
+        /* Export button styling */
+        .export-button.xlsx {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease-in-out;
+            display: inline-block;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .export-button.xlsx:hover {
+            background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+            color: white;
+            text-decoration: none;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .export-button.xlsx.loading {
+            background: #6b7280;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .export-button.xlsx small {
+            opacity: 0.85;
+            font-weight: normal;
+        }
+
+        /* Responsive Anpassungen für Export-Info */
+        @media (max-width: 768px) {
+            .export-section {
+                padding: 15px;
+            }
+            
+            .export-section > div:first-child {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .export-section form {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .export-section input[type="text"] {
+                min-width: auto;
+                width: 100%;
+            }
+            
+            .export-buttons {
+                margin-top: 10px;
+                text-align: center;
+            }
+            
+            .export-button.xlsx {
+                width: 100%;
+                padding: 12px 16px;
+            }
+        }
+        </style>
         <?php
     }
     
-    // Excel Export and other methods remain the same...
+    // Excel Export and other methods
     private function export_anmeldungen_xlsx() {
         global $wpdb;
         
-        // Clear any existing output
+        // Clean any existing output
         while (ob_get_level()) {
             ob_end_clean();
         }
@@ -1135,54 +1220,66 @@ class WettkampfAdmin {
         ", $where_params));
         
         // Generate filename
-        $filename = 'wettkampf_anmeldungen_' . date('Y-m-d_H-i') . '.xls';
+        $timestamp = date('Y-m-d_H-i');
+        $filename = 'wettkampf_anmeldungen_' . $timestamp;
+        
         if (!empty($wettkampf_filter)) {
             $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT name FROM $table_wettkampf WHERE id = %d", $wettkampf_filter));
             if ($wettkampf) {
-                $safe_name = preg_replace('/[^a-zA-Z0-9_-]/', '_', $wettkampf->name);
-                $filename = $safe_name . '_anmeldungen_' . date('Y-m-d_H-i') . '.xls';
+                $safe_name = $this->sanitize_filename($wettkampf->name);
+                $filename = $safe_name . '_anmeldungen_' . $timestamp;
             }
         }
         
-        // Set headers for Excel download
-        header('Content-Type: application/vnd.ms-excel; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        // Detect user agent for better compatibility
+        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+        $is_mobile = preg_match('/Mobile|Android|iPhone|iPad/', $user_agent);
+        
+        if ($is_mobile) {
+            // For mobile: Use CSV format which is more reliable
+            $this->export_as_csv($anmeldungen, $filename, $table_anmeldung_disziplinen, $table_disziplinen);
+        } else {
+            // For desktop: Use improved Excel format
+            $this->export_as_excel($anmeldungen, $filename, $table_anmeldung_disziplinen, $table_disziplinen);
+        }
+    }
+
+    /**
+     * CSV Export für bessere Mobile-Kompatibilität
+     */
+    private function export_as_csv($anmeldungen, $filename, $table_anmeldung_disziplinen, $table_disziplinen) {
+        global $wpdb;
+        
+        // CSV Headers
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
         header('Cache-Control: max-age=0');
         header('Pragma: public');
         
-        // Start fresh output
-        ob_start();
-        
-        // Output BOM for UTF-8
+        // Output UTF-8 BOM for proper encoding
         echo "\xEF\xBB\xBF";
         
-        // Start clean HTML table (Excel can read HTML tables perfectly)
-        echo '<!DOCTYPE html>';
-        echo '<html>';
-        echo '<head>';
-        echo '<meta charset="UTF-8">';
-        echo '<title>Wettkampf Anmeldungen</title>';
-        echo '</head>';
-        echo '<body>';
-        echo '<table border="1" style="border-collapse: collapse;">';
-        echo '<thead>';
-        echo '<tr style="background-color: #f0f0f0; font-weight: bold;">';
-        echo '<th>Vorname</th>';
-        echo '<th>Name</th>';
-        echo '<th>E-Mail</th>';
-        echo '<th>Geschlecht</th>';
-        echo '<th>Jahrgang</th>';
-        echo '<th>Kategorie</th>';
-        echo '<th>Wettkampf</th>';
-        echo '<th>Wettkampf Datum</th>';
-        echo '<th>Wettkampf Ort</th>';
-        echo '<th>Eltern fahren</th>';
-        echo '<th>Freie Plätze</th>';
-        echo '<th>Disziplinen</th>';
-        echo '<th>Anmeldedatum</th>';
-        echo '</tr>';
-        echo '</thead>';
-        echo '<tbody>';
+        // Open output stream
+        $output = fopen('php://output', 'w');
+        
+        // CSV column headers
+        $headers = array(
+            'Vorname',
+            'Name', 
+            'E-Mail',
+            'Geschlecht',
+            'Jahrgang',
+            'Kategorie',
+            'Wettkampf',
+            'Wettkampf Datum',
+            'Wettkampf Ort',
+            'Eltern fahren',
+            'Freie Plätze',
+            'Disziplinen',
+            'Anmeldedatum'
+        );
+        
+        fputcsv($output, $headers, ';'); // Use semicolon for better Excel compatibility
         
         // Data rows
         foreach ($anmeldungen as $anmeldung) {
@@ -1206,31 +1303,179 @@ class WettkampfAdmin {
             
             $user_category = WettkampfManager::calculateAgeCategory($anmeldung->jahrgang);
             
-            echo '<tr>';
-            echo '<td>' . htmlspecialchars($anmeldung->vorname, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->name, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->email, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->geschlecht, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->jahrgang, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($user_category, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_name, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . date('d.m.Y', strtotime($anmeldung->wettkampf_datum)) . '</td>';
-            echo '<td>' . htmlspecialchars($anmeldung->wettkampf_ort, ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . ($anmeldung->eltern_fahren ? 'Ja' : 'Nein') . '</td>';
-            echo '<td>' . ($anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '') . '</td>';
-            echo '<td>' . htmlspecialchars(!empty($disziplin_names) ? implode(', ', $disziplin_names) : '', ENT_QUOTES, 'UTF-8') . '</td>';
-            echo '<td>' . date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum)) . '</td>';
-            echo '</tr>';
+            $row = array(
+                $anmeldung->vorname,
+                $anmeldung->name,
+                $anmeldung->email,
+                $anmeldung->geschlecht,
+                $anmeldung->jahrgang,
+                $user_category,
+                $anmeldung->wettkampf_name,
+                date('d.m.Y', strtotime($anmeldung->wettkampf_datum)),
+                $anmeldung->wettkampf_ort,
+                $anmeldung->eltern_fahren ? 'Ja' : 'Nein',
+                $anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '',
+                !empty($disziplin_names) ? implode(', ', $disziplin_names) : '',
+                date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum))
+            );
+            
+            fputcsv($output, $row, ';');
         }
         
-        echo '</tbody>';
-        echo '</table>';
-        echo '</body>';
-        echo '</html>';
-        
-        // Flush and exit
-        ob_end_flush();
+        fclose($output);
         exit;
+    }
+
+    /**
+     * Verbesserter Excel Export für Desktop
+     */
+    private function export_as_excel($anmeldungen, $filename, $table_anmeldung_disziplinen, $table_disziplinen) {
+        global $wpdb;
+        
+        // Better Excel headers
+        header('Content-Type: application/vnd.ms-excel; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '.xls"');
+        header('Cache-Control: max-age=0, no-cache, must-revalidate');
+        header('Pragma: public');
+        header('Expires: 0');
+        
+        // Output UTF-8 BOM
+        echo "\xEF\xBB\xBF";
+        
+        // Improved Excel XML format
+        echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        echo '<?mso-application progid="Excel.Sheet"?>' . "\n";
+        echo '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"' . "\n";
+        echo ' xmlns:o="urn:schemas-microsoft-com:office:office"' . "\n";
+        echo ' xmlns:x="urn:schemas-microsoft-com:office:excel"' . "\n";
+        echo ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"' . "\n";
+        echo ' xmlns:html="http://www.w3.org/TR/REC-html40">' . "\n";
+        
+        // Document properties
+        echo '<DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">' . "\n";
+        echo '<Title>Wettkampf Anmeldungen</Title>' . "\n";
+        echo '<Author>Wettkampf Manager</Author>' . "\n";
+        echo '<Created>' . date('Y-m-d\TH:i:s\Z') . '</Created>' . "\n";
+        echo '</DocumentProperties>' . "\n";
+        
+        // Styles
+        echo '<Styles>' . "\n";
+        echo '<Style ss:ID="Header">' . "\n";
+        echo '<Font ss:Bold="1"/>' . "\n";
+        echo '<Interior ss:Color="#CCE5FF" ss:Pattern="Solid"/>' . "\n";
+        echo '<Borders>' . "\n";
+        echo '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>' . "\n";
+        echo '</Borders>' . "\n";
+        echo '</Style>' . "\n";
+        echo '<Style ss:ID="Data">' . "\n";
+        echo '<Borders>' . "\n";
+        echo '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E0E0E0"/>' . "\n";
+        echo '</Borders>' . "\n";
+        echo '</Style>' . "\n";
+        echo '</Styles>' . "\n";
+        
+        // Worksheet
+        echo '<Worksheet ss:Name="Anmeldungen">' . "\n";
+        echo '<Table>' . "\n";
+        
+        // Column widths
+        echo '<Column ss:Width="80"/>' . "\n";  // Vorname
+        echo '<Column ss:Width="80"/>' . "\n";  // Name
+        echo '<Column ss:Width="120"/>' . "\n"; // E-Mail
+        echo '<Column ss:Width="70"/>' . "\n";  // Geschlecht
+        echo '<Column ss:Width="60"/>' . "\n";  // Jahrgang
+        echo '<Column ss:Width="70"/>' . "\n";  // Kategorie
+        echo '<Column ss:Width="150"/>' . "\n"; // Wettkampf
+        echo '<Column ss:Width="80"/>' . "\n";  // Datum
+        echo '<Column ss:Width="100"/>' . "\n"; // Ort
+        echo '<Column ss:Width="80"/>' . "\n";  // Eltern fahren
+        echo '<Column ss:Width="70"/>' . "\n";  // Freie Plätze
+        echo '<Column ss:Width="200"/>' . "\n"; // Disziplinen
+        echo '<Column ss:Width="120"/>' . "\n"; // Anmeldedatum
+        
+        // Header row
+        echo '<Row>' . "\n";
+        $headers = array(
+            'Vorname', 'Name', 'E-Mail', 'Geschlecht', 'Jahrgang', 'Kategorie',
+            'Wettkampf', 'Wettkampf Datum', 'Wettkampf Ort', 'Eltern fahren',
+            'Freie Plätze', 'Disziplinen', 'Anmeldedatum'
+        );
+        
+        foreach ($headers as $header) {
+            echo '<Cell ss:StyleID="Header"><Data ss:Type="String">' . htmlspecialchars($header, ENT_XML1, 'UTF-8') . '</Data></Cell>' . "\n";
+        }
+        echo '</Row>' . "\n";
+        
+        // Data rows
+        foreach ($anmeldungen as $anmeldung) {
+            // Load disciplines for this registration
+            $anmeldung_disziplinen = $wpdb->get_results($wpdb->prepare("
+                SELECT d.name 
+                FROM $table_anmeldung_disziplinen ad 
+                JOIN $table_disziplinen d ON ad.disziplin_id = d.id 
+                WHERE ad.anmeldung_id = %d 
+                ORDER BY d.sortierung ASC, d.name ASC
+            ", $anmeldung->id));
+            
+            $disziplin_names = array();
+            if (is_array($anmeldung_disziplinen) && !empty($anmeldung_disziplinen)) {
+                foreach ($anmeldung_disziplinen as $d) {
+                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
+                        $disziplin_names[] = $d->name;
+                    }
+                }
+            }
+            
+            $user_category = WettkampfManager::calculateAgeCategory($anmeldung->jahrgang);
+            
+            echo '<Row>' . "\n";
+            
+            // Data cells
+            $data = array(
+                $anmeldung->vorname,
+                $anmeldung->name,
+                $anmeldung->email,
+                $anmeldung->geschlecht,
+                $anmeldung->jahrgang,
+                $user_category,
+                $anmeldung->wettkampf_name,
+                date('d.m.Y', strtotime($anmeldung->wettkampf_datum)),
+                $anmeldung->wettkampf_ort,
+                $anmeldung->eltern_fahren ? 'Ja' : 'Nein',
+                $anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '',
+                !empty($disziplin_names) ? implode(', ', $disziplin_names) : '',
+                date('d.m.Y H:i:s', strtotime($anmeldung->anmeldedatum))
+            );
+            
+            foreach ($data as $cell) {
+                echo '<Cell ss:StyleID="Data"><Data ss:Type="String">' . htmlspecialchars($cell, ENT_XML1, 'UTF-8') . '</Data></Cell>' . "\n";
+            }
+            
+            echo '</Row>' . "\n";
+        }
+        
+        echo '</Table>' . "\n";
+        echo '</Worksheet>' . "\n";
+        echo '</Workbook>' . "\n";
+        
+        exit;
+    }
+
+    /**
+     * Sanitize filename for different operating systems
+     */
+    private function sanitize_filename($filename) {
+        // Remove/replace problematic characters
+        $filename = preg_replace('/[^a-zA-Z0-9äöüÄÖÜß_-]/', '_', $filename);
+        $filename = preg_replace('/_{2,}/', '_', $filename); // Remove multiple underscores
+        $filename = trim($filename, '_');
+        
+        // Limit length
+        if (strlen($filename) > 50) {
+            $filename = substr($filename, 0, 50);
+        }
+        
+        return $filename;
     }
     
     public function admin_settings() {
@@ -1286,7 +1531,7 @@ class WettkampfAdmin {
                         <th><label for="export_email">Automatischer Export E-Mail</label></th>
                         <td>
                             <input type="email" id="export_email" name="export_email" value="<?php echo esc_attr($export_email); ?>" class="regular-text">
-                            <p class="description">E-Mail-Adresse für automatische Excel-Exporte nach Anmeldeschluss (2 Stunden nach Mitternacht)</p>
+                            <p class="description">E-Mail-Adresse für automatische CSV-Exporte nach Anmeldeschluss (2 Stunden nach Mitternacht)</p>
                             <?php if (!empty($export_email)): ?>
                                 <p style="color: #46b450; font-weight: 500;">✓ Automatische Exports sind aktiviert</p>
                             <?php else: ?>
@@ -1303,13 +1548,14 @@ class WettkampfAdmin {
             
             <!-- Informationsbox für Cron-Jobs -->
             <div style="margin-top: 30px; padding: 20px; background: #f0f6fc; border-left: 4px solid #2271b1; border-radius: 4px;">
-                <h3>🤖 Automatische Excel-Exports</h3>
+                <h3>🤖 Automatische CSV-Exports</h3>
                 <p><strong>Funktionsweise:</strong></p>
                 <ul>
                     <li>Das System prüft stündlich, ob Anmeldefristen abgelaufen sind</li>
-                    <li>2 Stunden nach Mitternacht des Anmeldeschlusstages wird automatisch ein Excel-Export generiert</li>
+                    <li>2 Stunden nach Mitternacht des Anmeldeschlusstages wird automatisch ein CSV-Export generiert</li>
                     <li>Der Export wird an die oben konfigurierte E-Mail-Adresse gesendet</li>
                     <li>Pro Wettkampf wird nur einmal ein automatischer Export versendet</li>
+                    <li>CSV-Format für beste Kompatibilität mit allen E-Mail-Clients und Mobilgeräten</li>
                 </ul>
                 
                 <p><strong>Technische Details:</strong></p>
@@ -1317,6 +1563,7 @@ class WettkampfAdmin {
                     <li>WordPress Cron-Job läuft stündlich</li>
                     <li>Export-Zeitfenster: 02:00 - 03:00 Uhr</li>
                     <li>Nur Wettkämpfe mit Anmeldungen werden exportiert</li>
+                    <li>UTF-8 Kodierung mit BOM für korrekte Umlaute</li>
                 </ul>
                 
                 <?php
