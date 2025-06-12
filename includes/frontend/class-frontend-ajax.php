@@ -1,6 +1,7 @@
 <?php
 /**
- * Frontend AJAX functionality - VOLLSTÄNDIG KORRIGIERT UND VEREINFACHT
+ * KOMPLETT KORRIGIERTE Frontend AJAX functionality
+ * Verwendet wp_send_json_success() und wp_send_json_error()
  */
 
 // Prevent direct access
@@ -14,6 +15,7 @@ class FrontendAjax {
      * Initialize AJAX handlers
      */
     public function init() {
+        // Standard AJAX Actions
         add_action('wp_ajax_wettkampf_anmeldung', array($this, 'process_anmeldung'));
         add_action('wp_ajax_nopriv_wettkampf_anmeldung', array($this, 'process_anmeldung'));
         add_action('wp_ajax_wettkampf_mutation', array($this, 'process_mutation'));
@@ -22,281 +24,53 @@ class FrontendAjax {
         add_action('wp_ajax_nopriv_get_wettkampf_disziplinen', array($this, 'get_wettkampf_disziplinen'));
         add_action('wp_ajax_wettkampf_view_only', array($this, 'process_view_only'));
         add_action('wp_ajax_nopriv_wettkampf_view_only', array($this, 'process_view_only'));
+        
+        // Debug für Entwicklung
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            add_action('wp_ajax_test_wettkampf_ajax', array($this, 'test_ajax_handler'));
+            add_action('wp_ajax_nopriv_test_wettkampf_ajax', array($this, 'test_ajax_handler'));
+        }
     }
     
     /**
-     * Process registration
+     * Test AJAX Handler
      */
-    public function process_anmeldung() {
-        // Verify nonce
-        if (!SecurityManager::verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Sicherheitsfehler')));
-        }
-        
-        // Check rate limiting
-        if (!SecurityManager::check_rate_limit('anmeldung', 5, 600)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Zu viele Anmeldeversuche. Bitte warte 10 Minuten.')));
-        }
-        
-        // Verify reCAPTCHA
-        $recaptcha_response = isset($_POST['g-recaptcha-response']) ? $_POST['g-recaptcha-response'] : '';
-        if (!SecurityManager::verify_recaptcha($recaptcha_response)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'reCAPTCHA Verifikation fehlgeschlagen')));
-        }
-        
-        // Sanitize and validate data
-        $sanitization_rules = array(
-            'wettkampf_id' => 'int',
-            'vorname' => 'text',
-            'name' => 'text',
-            'email' => 'email',
-            'geschlecht' => 'text',
-            'jahrgang' => 'int',
-            'eltern_fahren' => 'int',
-            'freie_plaetze' => 'int',
-            'disziplinen' => 'array'
-        );
-        
-        $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
-        
-        // Check for duplicates
-        if (SecurityManager::check_duplicate_registration($data['wettkampf_id'], $data['email'], $data['vorname'], $data['jahrgang'])) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Eine Person mit dieser E-Mail, diesem Vornamen und Jahrgang ist bereits angemeldet!')));
-        }
-        
-        // Validation rules
-        $validation_rules = array(
-            'wettkampf_id' => array('required' => true),
-            'vorname' => array('required' => true, 'min_length' => 2),
-            'name' => array('required' => true, 'min_length' => 2),
-            'email' => array('required' => true, 'email' => true),
-            'geschlecht' => array('required' => true),
-            'jahrgang' => array('required' => true, 'year' => true),
-            'eltern_fahren' => array('required' => true)
-        );
-        
-        $validation = SecurityManager::validate_form_data($data, $validation_rules);
-        
-        if (!$validation['valid']) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Validierungsfehler: ' . implode(', ', $validation['errors']))));
-        }
-        
-        // Save registration
-        $anmeldung_id = WettkampfDatabase::save_registration($data);
-        
-        if ($anmeldung_id) {
-            // Send confirmation email
-            $email_manager = new EmailManager();
-            $email_manager->send_confirmation_email($anmeldung_id);
-            
-            // Reset rate limit on success
-            SecurityManager::reset_rate_limit('anmeldung');
-            
-            wp_die(json_encode(array('success' => true, 'message' => 'Anmeldung erfolgreich!')));
-        } else {
-            wp_die(json_encode(array('success' => false, 'message' => 'Fehler bei der Anmeldung')));
-        }
+    public function test_ajax_handler() {
+        wp_send_json_success(array(
+            'message' => 'AJAX funktioniert perfekt!',
+            'timestamp' => current_time('mysql'),
+            'test' => 'OK'
+        ));
     }
     
     /**
-     * Process mutation (edit/delete)
-     */
-    public function process_mutation() {
-        if (!SecurityManager::verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Sicherheitsfehler')));
-        }
-        
-        $anmeldung_id = intval($_POST['anmeldung_id']);
-        $action_type = isset($_POST['action_type']) ? sanitize_text_field($_POST['action_type']) : '';
-        
-        if ($action_type === 'verify') {
-            $this->verify_registration_ownership($anmeldung_id);
-        } elseif ($action_type === 'delete') {
-            $this->delete_registration($anmeldung_id);
-        } else {
-            $this->update_registration($anmeldung_id);
-        }
-    }
-    
-    /**
-     * Verify registration ownership
-     */
-    private function verify_registration_ownership($anmeldung_id) {
-        // Rate limiting
-        if (!SecurityManager::check_rate_limit('mutation_verify', 5, 600)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Zu viele Versuche. Bitte warten Sie 10 Minuten.')));
-        }
-        
-        $verify_email = sanitize_email($_POST['verify_email']);
-        $verify_jahrgang = intval($_POST['verify_jahrgang']);
-        
-        if (!SecurityManager::verify_registration_ownership($anmeldung_id, $verify_email, $verify_jahrgang)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'E-Mail oder Jahrgang stimmen nicht ueberein')));
-        }
-        
-        // Success - load full registration data with disciplines
-        global $wpdb;
-        $tables = WettkampfDatabase::get_table_names();
-        
-        $anmeldung = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$tables['anmeldung']} WHERE id = %d", $anmeldung_id));
-        
-        // Load disciplines
-        $anmeldung_disciplines = $wpdb->get_results($wpdb->prepare("
-            SELECT disziplin_id 
-            FROM {$tables['anmeldung_disziplinen']} 
-            WHERE anmeldung_id = %d
-        ", $anmeldung_id));
-        $anmeldung->disziplinen = array_map(function($d) { return $d->disziplin_id; }, $anmeldung_disciplines);
-        
-        // Reset rate limit on success
-        SecurityManager::reset_rate_limit('mutation_verify');
-        
-        wp_die(json_encode(array('success' => true, 'data' => $anmeldung)));
-    }
-    
-    /**
-     * Delete registration
-     */
-    private function delete_registration($anmeldung_id) {
-        $result = WettkampfDatabase::delete_registration($anmeldung_id);
-        
-        if ($result) {
-            wp_die(json_encode(array('success' => true, 'message' => 'Anmeldung erfolgreich geloescht')));
-        } else {
-            wp_die(json_encode(array('success' => false, 'message' => 'Fehler beim Loeschen')));
-        }
-    }
-    
-    /**
-     * Update registration
-     */
-    private function update_registration($anmeldung_id) {
-        // Sanitize data
-        $sanitization_rules = array(
-            'vorname' => 'text',
-            'name' => 'text',
-            'email' => 'email',
-            'geschlecht' => 'text',
-            'jahrgang' => 'int',
-            'eltern_fahren' => 'int',
-            'freie_plaetze' => 'int',
-            'disziplinen' => 'array'
-        );
-        
-        $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
-        
-        // Validation
-        $validation_rules = array(
-            'vorname' => array('required' => true, 'min_length' => 2),
-            'name' => array('required' => true, 'min_length' => 2),
-            'email' => array('required' => true, 'email' => true),
-            'geschlecht' => array('required' => true),
-            'jahrgang' => array('required' => true, 'year' => true)
-        );
-        
-        $validation = SecurityManager::validate_form_data($data, $validation_rules);
-        
-        if (!$validation['valid']) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Validierungsfehler: ' . implode(', ', $validation['errors']))));
-        }
-        
-        $result = WettkampfDatabase::save_registration($data, $anmeldung_id);
-        
-        if ($result !== false) {
-            wp_die(json_encode(array('success' => true, 'message' => 'Anmeldung erfolgreich aktualisiert')));
-        } else {
-            wp_die(json_encode(array('success' => false, 'message' => 'Fehler beim Aktualisieren')));
-        }
-    }
-    
-    /**
-     * Process view-only request
-     */
-    public function process_view_only() {
-        if (!SecurityManager::verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Sicherheitsfehler')));
-        }
-        
-        $anmeldung_id = intval($_POST['anmeldung_id']);
-        
-        // Rate limiting
-        if (!SecurityManager::check_rate_limit('view_only', 5, 600)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Zu viele Versuche. Bitte warten Sie 10 Minuten.')));
-        }
-        
-        $verify_email = sanitize_email($_POST['verify_email']);
-        $verify_jahrgang = intval($_POST['verify_jahrgang']);
-        
-        if (!SecurityManager::verify_registration_ownership($anmeldung_id, $verify_email, $verify_jahrgang)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'E-Mail oder Jahrgang stimmen nicht ueberein')));
-        }
-        
-        // Success - load registration data
-        global $wpdb;
-        $tables = WettkampfDatabase::get_table_names();
-        
-        $anmeldung = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$tables['anmeldung']} WHERE id = %d", $anmeldung_id));
-        
-        // Load disciplines as text
-        $anmeldung_disciplines = WettkampfDatabase::get_registration_disciplines($anmeldung_id);
-        
-        $discipline_names = array();
-        if (is_array($anmeldung_disciplines) && !empty($anmeldung_disciplines)) {
-            foreach ($anmeldung_disciplines as $d) {
-                if (is_object($d) && isset($d->name) && !empty($d->name)) {
-                    $discipline_names[] = $d->name;
-                }
-            }
-        }
-        
-        $anmeldung->disziplinen_text = !empty($discipline_names) ? implode(', ', $discipline_names) : 'Keine';
-        
-        // Reset rate limit on success
-        SecurityManager::reset_rate_limit('view_only');
-        
-        wp_die(json_encode(array('success' => true, 'data' => $anmeldung)));
-    }
-    
-    /**
-     * VEREINFACHTE UND ROBUSTE VERSION: Get competition disciplines with category filter
+     * KORRIGIERTE Disziplinen-Abfrage
      */
     public function get_wettkampf_disziplinen() {
-        // Debug-Start
-        error_log('WETTKAMPF AJAX: get_wettkampf_disziplinen called');
-        error_log('WETTKAMPF AJAX: POST data: ' . print_r($_POST, true));
-        
-        // Basis-Sicherheitsprüfung - VEREINFACHT
-        if (!isset($_POST['nonce'])) {
-            error_log('WETTKAMPF AJAX: No nonce provided');
-            wp_die(json_encode(array('success' => false, 'message' => 'Nonce fehlt')));
+        // 1. Nonce-Überprüfung
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
+            wp_send_json_error(array(
+                'message' => 'Sicherheitsfehler - Nonce ungültig'
+            ));
         }
         
-        if (!wp_verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
-            error_log('WETTKAMPF AJAX: Invalid nonce');
-            wp_die(json_encode(array('success' => false, 'message' => 'Ungültige Nonce')));
-        }
-        
-        // Parameter extrahieren
+        // 2. Parameter validieren
         $wettkampf_id = isset($_POST['wettkampf_id']) ? intval($_POST['wettkampf_id']) : 0;
-        $jahrgang = isset($_POST['jahrgang']) ? intval($_POST['jahrgang']) : 0;
-        
-        error_log("WETTKAMPF AJAX: wettkampf_id=$wettkampf_id, jahrgang=$jahrgang");
+        $jahrgang = isset($_POST['jahrgang']) ? intval($_POST['jahrgang']) : null;
         
         if ($wettkampf_id <= 0) {
-            error_log('WETTKAMPF AJAX: Invalid wettkampf_id');
-            wp_die(json_encode(array('success' => false, 'message' => 'Ungültige Wettkampf-ID')));
+            wp_send_json_error(array(
+                'message' => 'Ungültige Wettkampf-ID'
+            ));
         }
         
-        // Kategorie berechnen
+        // 3. Kategorie berechnen
         $user_category = null;
-        if ($jahrgang > 1900) {
-            // Prüfe ob CategoryCalculator existiert
+        if ($jahrgang && $jahrgang > 1900) {
             if (class_exists('CategoryCalculator')) {
                 $user_category = CategoryCalculator::calculate($jahrgang);
-                error_log("WETTKAMPF AJAX: Calculated category: $user_category");
             } else {
-                error_log('WETTKAMPF AJAX: CategoryCalculator class not found');
-                // Fallback Kategorie-Berechnung
+                // Fallback-Kategorieberechnung
                 $current_year = date('Y');
                 $age = $current_year - $jahrgang;
                 if ($age < 10) $user_category = 'U10';
@@ -304,43 +78,19 @@ class FrontendAjax {
                 elseif ($age < 14) $user_category = 'U14';
                 elseif ($age < 16) $user_category = 'U16';
                 else $user_category = 'U18';
-                error_log("WETTKAMPF AJAX: Fallback category: $user_category");
             }
         }
         
+        // 4. Disziplinen laden
         try {
-            // Disziplinen laden - mit Fallback
-            $disciplines = array();
-            
             if (class_exists('WettkampfDatabase')) {
                 $disciplines = WettkampfDatabase::get_competition_disciplines($wettkampf_id, $user_category);
-                error_log('WETTKAMPF AJAX: Found ' . count($disciplines) . ' disciplines via WettkampfDatabase');
             } else {
-                // Fallback: Direkte Datenbankabfrage
-                error_log('WETTKAMPF AJAX: WettkampfDatabase not found, using fallback');
-                global $wpdb;
-                
-                $query = "
-                    SELECT d.* 
-                    FROM {$wpdb->prefix}wettkampf_disziplin_zuordnung z 
-                    JOIN {$wpdb->prefix}wettkampf_disziplinen d ON z.disziplin_id = d.id 
-                    WHERE z.wettkampf_id = %d AND d.aktiv = 1
-                ";
-                
-                $params = array($wettkampf_id);
-                
-                if ($user_category && $user_category !== '') {
-                    $query .= " AND (d.kategorie = %s OR d.kategorie = 'Alle' OR d.kategorie IS NULL OR d.kategorie = '')";
-                    $params[] = $user_category;
-                }
-                
-                $query .= " ORDER BY d.sortierung ASC, d.name ASC";
-                
-                $disciplines = $wpdb->get_results($wpdb->prepare($query, $params));
-                error_log('WETTKAMPF AJAX: Found ' . count($disciplines) . ' disciplines via fallback query');
+                // Fallback: Direkte DB-Abfrage
+                $disciplines = $this->get_disciplines_fallback($wettkampf_id, $user_category);
             }
             
-            // Daten für JSON vorbereiten
+            // 5. Daten für JSON vorbereiten
             $disciplines_array = array();
             if (is_array($disciplines)) {
                 foreach ($disciplines as $discipline) {
@@ -355,36 +105,337 @@ class FrontendAjax {
                 }
             }
             
-            $response = array(
-                'success' => true,
+            // 6. Erfolgreiche Antwort senden
+            wp_send_json_success(array(
                 'data' => $disciplines_array,
                 'user_category' => $user_category,
                 'wettkampf_id' => $wettkampf_id,
                 'jahrgang' => $jahrgang,
-                'debug_info' => array(
-                    'found_disciplines' => count($disciplines_array),
-                    'calculated_category' => $user_category,
-                    'query_params' => array(
-                        'wettkampf_id' => $wettkampf_id,
-                        'jahrgang' => $jahrgang
-                    )
-                )
-            );
-            
-            error_log('WETTKAMPF AJAX: Sending success response with ' . count($disciplines_array) . ' disciplines');
-            wp_die(json_encode($response));
+                'count' => count($disciplines_array)
+            ));
             
         } catch (Exception $e) {
-            error_log('WETTKAMPF AJAX: Exception caught: ' . $e->getMessage());
-            wp_die(json_encode(array(
-                'success' => false, 
-                'message' => 'Datenbankfehler: ' . $e->getMessage(),
-                'debug_info' => array(
-                    'exception' => $e->getMessage(),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine()
+            // 7. Fehler-Antwort
+            error_log('Wettkampf AJAX Error: ' . $e->getMessage());
+            wp_send_json_error(array(
+                'message' => 'Datenbankfehler beim Laden der Disziplinen'
+            ));
+        }
+    }
+    
+    /**
+     * Fallback für Disziplinen-Abfrage
+     */
+    private function get_disciplines_fallback($wettkampf_id, $user_category = null) {
+        global $wpdb;
+        
+        $table_disziplinen = $wpdb->prefix . 'wettkampf_disziplinen';
+        $table_zuordnung = $wpdb->prefix . 'wettkampf_disziplin_zuordnung';
+        
+        $query = "
+            SELECT d.* 
+            FROM {$table_zuordnung} z 
+            JOIN {$table_disziplinen} d ON z.disziplin_id = d.id 
+            WHERE z.wettkampf_id = %d AND d.aktiv = 1
+        ";
+        
+        $params = array($wettkampf_id);
+        
+        if ($user_category) {
+            $query .= " AND (d.kategorie = %s OR d.kategorie = 'Alle' OR d.kategorie IS NULL OR d.kategorie = '')";
+            $params[] = $user_category;
+        }
+        
+        $query .= " ORDER BY d.sortierung ASC, d.name ASC";
+        
+        $results = $wpdb->get_results($wpdb->prepare($query, $params));
+        
+        return $results ? $results : array();
+    }
+    
+    /**
+     * Process registration
+     */
+    public function process_anmeldung() {
+        // Nonce-Überprüfung
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
+            wp_send_json_error(array('message' => 'Sicherheitsfehler'));
+        }
+        
+        // Rate limiting
+        if (!SecurityManager::check_rate_limit('anmeldung', 5, 600)) {
+            wp_send_json_error(array('message' => 'Zu viele Anmeldeversuche. Bitte warte 10 Minuten.'));
+        }
+        
+        // reCAPTCHA
+        $recaptcha_response = isset($_POST['g-recaptcha-response']) ? $_POST['g-recaptcha-response'] : '';
+        if (!SecurityManager::verify_recaptcha($recaptcha_response)) {
+            wp_send_json_error(array('message' => 'reCAPTCHA Verifikation fehlgeschlagen'));
+        }
+        
+        // Daten bereinigen
+        $sanitization_rules = array(
+            'wettkampf_id' => 'int',
+            'vorname' => 'text',
+            'name' => 'text',
+            'email' => 'email',
+            'geschlecht' => 'text',
+            'jahrgang' => 'int',
+            'eltern_fahren' => 'int',
+            'freie_plaetze' => 'int',
+            'disziplinen' => 'array'
+        );
+        
+        $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
+        
+        // Duplikate prüfen
+        if (SecurityManager::check_duplicate_registration($data['wettkampf_id'], $data['email'], $data['vorname'], $data['jahrgang'])) {
+            wp_send_json_error(array('message' => 'Eine Person mit dieser E-Mail, diesem Vornamen und Jahrgang ist bereits angemeldet!'));
+        }
+        
+        // Validierung
+        $validation_rules = array(
+            'wettkampf_id' => array('required' => true),
+            'vorname' => array('required' => true, 'min_length' => 2),
+            'name' => array('required' => true, 'min_length' => 2),
+            'email' => array('required' => true, 'email' => true),
+            'geschlecht' => array('required' => true),
+            'jahrgang' => array('required' => true, 'year' => true),
+            'eltern_fahren' => array('required' => true)
+        );
+        
+        $validation = SecurityManager::validate_form_data($data, $validation_rules);
+        
+        if (!$validation['valid']) {
+            wp_send_json_error(array('message' => 'Validierungsfehler: ' . implode(', ', $validation['errors'])));
+        }
+        
+        // Speichern
+        try {
+            $anmeldung_id = WettkampfDatabase::save_registration($data);
+            
+            if ($anmeldung_id) {
+                // E-Mail senden
+                if (class_exists('EmailManager')) {
+                    $email_manager = new EmailManager();
+                    $email_manager->send_confirmation_email($anmeldung_id);
+                }
+                
+                SecurityManager::reset_rate_limit('anmeldung');
+                
+                wp_send_json_success(array(
+                    'message' => 'Anmeldung erfolgreich!',
+                    'anmeldung_id' => $anmeldung_id
+                ));
+            } else {
+                wp_send_json_error(array('message' => 'Fehler beim Speichern der Anmeldung'));
+            }
+        } catch (Exception $e) {
+            error_log('Wettkampf Anmeldung Error: ' . $e->getMessage());
+            wp_send_json_error(array('message' => 'Ein unerwarteter Fehler ist aufgetreten.'));
+        }
+    }
+    
+    /**
+     * Process mutation (edit/delete)
+     */
+    public function process_mutation() {
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
+            wp_send_json_error(array('message' => 'Sicherheitsfehler'));
+        }
+        
+        $anmeldung_id = intval($_POST['anmeldung_id']);
+        $action_type = isset($_POST['action_type']) ? sanitize_text_field($_POST['action_type']) : '';
+        
+        try {
+            if ($action_type === 'verify') {
+                $this->verify_registration_ownership($anmeldung_id);
+            } elseif ($action_type === 'delete') {
+                $this->delete_registration($anmeldung_id);
+            } else {
+                $this->update_registration($anmeldung_id);
+            }
+        } catch (Exception $e) {
+            error_log('Wettkampf Mutation Error: ' . $e->getMessage());
+            wp_send_json_error(array('message' => 'Ein unerwarteter Fehler ist aufgetreten.'));
+        }
+    }
+    
+    /**
+     * Verify registration ownership
+     */
+    private function verify_registration_ownership($anmeldung_id) {
+        // Rate limiting
+        if (!SecurityManager::check_rate_limit('mutation_verify', 5, 600)) {
+            wp_send_json_error(array('message' => 'Zu viele Versuche. Bitte warten Sie 10 Minuten.'));
+        }
+        
+        $verify_email = sanitize_email($_POST['verify_email']);
+        $verify_jahrgang = intval($_POST['verify_jahrgang']);
+        
+        if (!SecurityManager::verify_registration_ownership($anmeldung_id, $verify_email, $verify_jahrgang)) {
+            wp_send_json_error(array('message' => 'E-Mail oder Jahrgang stimmen nicht überein'));
+        }
+        
+        // Daten laden
+        global $wpdb;
+        $tables = WettkampfDatabase::get_table_names();
+        
+        $anmeldung = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$tables['anmeldung']} WHERE id = %d", $anmeldung_id));
+        
+        if (!$anmeldung) {
+            wp_send_json_error(array('message' => 'Anmeldung nicht gefunden'));
+        }
+        
+        // Disziplinen laden
+        $anmeldung_disciplines = $wpdb->get_results($wpdb->prepare("
+            SELECT disziplin_id 
+            FROM {$tables['anmeldung_disziplinen']} 
+            WHERE anmeldung_id = %d
+        ", $anmeldung_id));
+        
+        $discipline_ids = array();
+        foreach ($anmeldung_disciplines as $d) {
+            $discipline_ids[] = $d->disziplin_id;
+        }
+        
+        SecurityManager::reset_rate_limit('mutation_verify');
+        
+        wp_send_json_success(array(
+            'data' => array(
+                'id' => $anmeldung->id,
+                'wettkampf_id' => $anmeldung->wettkampf_id,
+                'vorname' => $anmeldung->vorname,
+                'name' => $anmeldung->name,
+                'email' => $anmeldung->email,
+                'geschlecht' => $anmeldung->geschlecht,
+                'jahrgang' => $anmeldung->jahrgang,
+                'eltern_fahren' => $anmeldung->eltern_fahren,
+                'freie_plaetze' => $anmeldung->freie_plaetze,
+                'disziplinen' => $discipline_ids
+            )
+        ));
+    }
+    
+    /**
+     * Delete registration
+     */
+    private function delete_registration($anmeldung_id) {
+        $result = WettkampfDatabase::delete_registration($anmeldung_id);
+        
+        if ($result) {
+            wp_send_json_success(array('message' => 'Anmeldung erfolgreich gelöscht'));
+        } else {
+            wp_send_json_error(array('message' => 'Fehler beim Löschen'));
+        }
+    }
+    
+    /**
+     * Update registration
+     */
+    private function update_registration($anmeldung_id) {
+        // Daten bereinigen
+        $sanitization_rules = array(
+            'vorname' => 'text',
+            'name' => 'text',
+            'email' => 'email',
+            'geschlecht' => 'text',
+            'jahrgang' => 'int',
+            'eltern_fahren' => 'int',
+            'freie_plaetze' => 'int',
+            'disziplinen' => 'array'
+        );
+        
+        $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
+        
+        // Validierung
+        $validation_rules = array(
+            'vorname' => array('required' => true, 'min_length' => 2),
+            'name' => array('required' => true, 'min_length' => 2),
+            'email' => array('required' => true, 'email' => true),
+            'geschlecht' => array('required' => true),
+            'jahrgang' => array('required' => true, 'year' => true)
+        );
+        
+        $validation = SecurityManager::validate_form_data($data, $validation_rules);
+        
+        if (!$validation['valid']) {
+            wp_send_json_error(array('message' => 'Validierungsfehler: ' . implode(', ', $validation['errors'])));
+        }
+        
+        $result = WettkampfDatabase::save_registration($data, $anmeldung_id);
+        
+        if ($result !== false) {
+            wp_send_json_success(array('message' => 'Anmeldung erfolgreich aktualisiert'));
+        } else {
+            wp_send_json_error(array('message' => 'Fehler beim Aktualisieren'));
+        }
+    }
+    
+    /**
+     * Process view-only request
+     */
+    public function process_view_only() {
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
+            wp_send_json_error(array('message' => 'Sicherheitsfehler'));
+        }
+        
+        $anmeldung_id = intval($_POST['anmeldung_id']);
+        
+        // Rate limiting
+        if (!SecurityManager::check_rate_limit('view_only', 5, 600)) {
+            wp_send_json_error(array('message' => 'Zu viele Versuche. Bitte warten Sie 10 Minuten.'));
+        }
+        
+        $verify_email = sanitize_email($_POST['verify_email']);
+        $verify_jahrgang = intval($_POST['verify_jahrgang']);
+        
+        if (!SecurityManager::verify_registration_ownership($anmeldung_id, $verify_email, $verify_jahrgang)) {
+            wp_send_json_error(array('message' => 'E-Mail oder Jahrgang stimmen nicht überein'));
+        }
+        
+        try {
+            // Anmeldung laden
+            global $wpdb;
+            $tables = WettkampfDatabase::get_table_names();
+            
+            $anmeldung = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$tables['anmeldung']} WHERE id = %d", $anmeldung_id));
+            
+            if (!$anmeldung) {
+                wp_send_json_error(array('message' => 'Anmeldung nicht gefunden'));
+            }
+            
+            // Disziplinen als Text laden
+            $anmeldung_disciplines = WettkampfDatabase::get_registration_disciplines($anmeldung_id);
+            
+            $discipline_names = array();
+            if (is_array($anmeldung_disciplines) && !empty($anmeldung_disciplines)) {
+                foreach ($anmeldung_disciplines as $d) {
+                    if (is_object($d) && isset($d->name) && !empty($d->name)) {
+                        $discipline_names[] = $d->name;
+                    }
+                }
+            }
+            
+            SecurityManager::reset_rate_limit('view_only');
+            
+            wp_send_json_success(array(
+                'data' => array(
+                    'vorname' => $anmeldung->vorname,
+                    'name' => $anmeldung->name,
+                    'email' => $anmeldung->email,
+                    'geschlecht' => $anmeldung->geschlecht,
+                    'jahrgang' => $anmeldung->jahrgang,
+                    'eltern_fahren' => $anmeldung->eltern_fahren,
+                    'freie_plaetze' => $anmeldung->freie_plaetze,
+                    'anmeldedatum' => $anmeldung->anmeldedatum,
+                    'disziplinen_text' => !empty($discipline_names) ? implode(', ', $discipline_names) : 'Keine'
                 )
-            )));
+            ));
+            
+        } catch (Exception $e) {
+            error_log('Wettkampf View Error: ' . $e->getMessage());
+            wp_send_json_error(array('message' => 'Ein unerwarteter Fehler ist aufgetreten.'));
         }
     }
 }

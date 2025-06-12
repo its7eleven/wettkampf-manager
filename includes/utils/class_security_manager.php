@@ -1,6 +1,6 @@
 <?php
 /**
- * Security management utility
+ * KORRIGIERTE Security management utility - Fix für AJAX Errors
  */
 
 // Prevent direct access
@@ -14,6 +14,24 @@ class SecurityManager {
      * Rate limiting cache
      */
     private static $rate_limits = array();
+    
+    /**
+     * KORRIGIERTE Nonce-Verifizierung
+     */
+    public static function verify_nonce($nonce, $action = 'wettkampf_ajax') {
+        if (empty($nonce)) {
+            error_log('SecurityManager: Leerer Nonce erhalten');
+            return false;
+        }
+        
+        $result = wp_verify_nonce($nonce, $action);
+        
+        if (!$result) {
+            error_log('SecurityManager: Nonce-Verifikation fehlgeschlagen. Nonce: ' . $nonce . ', Action: ' . $action);
+        }
+        
+        return $result;
+    }
     
     /**
      * Verify reCAPTCHA response
@@ -145,9 +163,18 @@ class SecurityManager {
             
             // Year validation
             if (isset($rule_set['year']) && $rule_set['year']) {
-                $validation = CategoryCalculator::validate_birth_year($value);
-                if (!$validation['valid']) {
-                    $errors[$field] = $validation['error'];
+                if (class_exists('CategoryCalculator')) {
+                    $validation = CategoryCalculator::validate_birth_year($value);
+                    if (!$validation['valid']) {
+                        $errors[$field] = $validation['error'];
+                    }
+                } else {
+                    // Fallback year validation
+                    $year = intval($value);
+                    $current_year = date('Y');
+                    if ($year < 1900 || $year > $current_year || strlen((string)$year) !== 4) {
+                        $errors[$field] = 'Jahrgang muss zwischen 1900 und ' . $current_year . ' liegen';
+                    }
                 }
             }
             
