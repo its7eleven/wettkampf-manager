@@ -245,7 +245,7 @@ class FrontendDisplay {
             <div class="teilnehmer-info">
                 <span class="teilnehmer-name">
                     <?php echo SecurityManager::escape_html($anmeldung->vorname . ' ' . $anmeldung->name); ?>
-                    <small style="color: #6b7280; margin-left: 5px;">(<?php echo SecurityManager::escape_html($user_category); ?>)</small>
+                    
                 </span>
             </div>
             <div class="teilnehmer-actions">
