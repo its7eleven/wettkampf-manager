@@ -1,6 +1,6 @@
 <?php
 /**
- * Frontend AJAX functionality
+ * Frontend AJAX functionality - KOMPLETT KORRIGIERT
  */
 
 // Prevent direct access
@@ -131,7 +131,7 @@ class FrontendAjax {
         $verify_jahrgang = intval($_POST['verify_jahrgang']);
         
         if (!SecurityManager::verify_registration_ownership($anmeldung_id, $verify_email, $verify_jahrgang)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'E-Mail oder Jahrgang stimmen nicht überein')));
+            wp_die(json_encode(array('success' => false, 'message' => 'E-Mail oder Jahrgang stimmen nicht ueberein')));
         }
         
         // Success - load full registration data with disciplines
@@ -161,9 +161,9 @@ class FrontendAjax {
         $result = WettkampfDatabase::delete_registration($anmeldung_id);
         
         if ($result) {
-            wp_die(json_encode(array('success' => true, 'message' => 'Anmeldung erfolgreich gelöscht')));
+            wp_die(json_encode(array('success' => true, 'message' => 'Anmeldung erfolgreich geloescht')));
         } else {
-            wp_die(json_encode(array('success' => false, 'message' => 'Fehler beim Löschen')));
+            wp_die(json_encode(array('success' => false, 'message' => 'Fehler beim Loeschen')));
         }
     }
     
@@ -228,7 +228,7 @@ class FrontendAjax {
         $verify_jahrgang = intval($_POST['verify_jahrgang']);
         
         if (!SecurityManager::verify_registration_ownership($anmeldung_id, $verify_email, $verify_jahrgang)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'E-Mail oder Jahrgang stimmen nicht überein')));
+            wp_die(json_encode(array('success' => false, 'message' => 'E-Mail oder Jahrgang stimmen nicht ueberein')));
         }
         
         // Success - load registration data
@@ -258,27 +258,68 @@ class FrontendAjax {
     }
     
     /**
-     * Get competition disciplines with category filter
+     * KORRIGIERT: Get competition disciplines with category filter
      */
     public function get_wettkampf_disziplinen() {
-        if (!SecurityManager::verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
+        // Verify nonce
+        if (!isset($_POST['nonce']) || !SecurityManager::verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
             wp_die(json_encode(array('success' => false, 'message' => 'Sicherheitsfehler')));
         }
         
         $wettkampf_id = intval($_POST['wettkampf_id']);
-        $jahrgang = isset($_POST['jahrgang']) ? intval($_POST['jahrgang']) : null;
+        $jahrgang = isset($_POST['jahrgang']) && !empty($_POST['jahrgang']) ? intval($_POST['jahrgang']) : null;
         
-        $user_category = null;
-        if ($jahrgang) {
-            $user_category = CategoryCalculator::calculate($jahrgang);
+        // Debug logging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Wettkampf AJAX: Loading disciplines for wettkampf_id=$wettkampf_id, jahrgang=$jahrgang");
         }
         
+        if (empty($wettkampf_id)) {
+            wp_die(json_encode(array('success' => false, 'message' => 'Wettkampf ID fehlt')));
+        }
+        
+        $user_category = null;
+        if ($jahrgang && $jahrgang > 1900) {
+            $user_category = CategoryCalculator::calculate($jahrgang);
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Wettkampf AJAX: Calculated user category: $user_category for year $jahrgang");
+            }
+        }
+        
+        // Get disciplines for this competition with category filter
         $disciplines = WettkampfDatabase::get_competition_disciplines($wettkampf_id, $user_category);
         
-        wp_die(json_encode(array(
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Wettkampf AJAX: Found " . count($disciplines) . " disciplines");
+        }
+        
+        // Convert to array format for JSON response
+        $disciplines_array = array();
+        if (is_array($disciplines) && !empty($disciplines)) {
+            foreach ($disciplines as $discipline) {
+                if (is_object($discipline)) {
+                    $disciplines_array[] = array(
+                        'id' => intval($discipline->id),
+                        'name' => sanitize_text_field($discipline->name),
+                        'beschreibung' => sanitize_text_field($discipline->beschreibung),
+                        'kategorie' => sanitize_text_field($discipline->kategorie)
+                    );
+                }
+            }
+        }
+        
+        $response_data = array(
             'success' => true, 
-            'data' => $disciplines,
-            'user_category' => $user_category
-        )));
+            'data' => $disciplines_array,
+            'user_category' => $user_category,
+            'wettkampf_id' => $wettkampf_id,
+            'jahrgang' => $jahrgang
+        );
+        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Wettkampf AJAX: Sending response: " . json_encode($response_data));
+        }
+        
+        wp_die(json_encode($response_data));
     }
 }

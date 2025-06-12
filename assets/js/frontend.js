@@ -214,21 +214,150 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // Event Handler für Jahrgang-Eingabe in Anmeldeformular
+    // KORRIGIERTE Funktion zum Laden von Disziplinen mit Kategorie-Filter
+    function loadWettkampfDisziplinenWithCategory(wettkampfId, jahrgang, containerId, groupId, selectedDisziplinen = []) {
+        console.log('Loading disciplines with category filter:', {wettkampfId, jahrgang, containerId, groupId});
+        
+        // Validierung der Parameter
+        if (!wettkampfId || wettkampfId <= 0) {
+            console.error('Invalid wettkampf_id:', wettkampfId);
+            return;
+        }
+        
+        // Container und Group Elemente finden
+        const container = $('#' + containerId);
+        const group = $('#' + groupId);
+        
+        if (container.length === 0) {
+            console.error('Container not found:', containerId);
+            return;
+        }
+        
+        if (group.length === 0) {
+            console.error('Group not found:', groupId);
+            return;
+        }
+        
+        $.ajax({
+            url: wettkampf_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'get_wettkampf_disziplinen',
+                wettkampf_id: parseInt(wettkampfId),
+                jahrgang: jahrgang && jahrgang > 1900 ? parseInt(jahrgang) : null, // KORRIGIERT: Nur gültigen Jahrgang senden
+                nonce: wettkampf_ajax.nonce
+            },
+            dataType: 'json',
+            beforeSend: function() {
+                // Loading-Indikator anzeigen
+                container.html('<div style="text-align: center; padding: 20px;"><span class="spinner"></span> Lade passende Disziplinen...</div>');
+                group.show();
+            },
+            success: function(response) {
+                console.log('Disciplines AJAX response:', response);
+                
+                if (response.success && response.data && response.data.length > 0) {
+                    // Clear container
+                    container.empty();
+                    
+                    // Kategorie-Info anzeigen
+                    let html = '';
+                    if (response.user_category) {
+                        html += '<div style="margin-bottom: 15px; padding: 12px; background: #e0f2fe; border: 1px solid #0891b2; border-radius: 6px; font-size: 14px;">';
+                        html += '<strong>📋 Verfügbare Disziplinen für Kategorie ' + escapeHtml(response.user_category) + ':</strong>';
+                        html += '</div>';
+                        
+                        console.log('User category:', response.user_category, 'Disciplines count:', response.data.length);
+                    }
+                    
+                    // Create discipline checkboxes
+                    html += '<div style="max-height: 200px; overflow-y: auto; border: 1px solid #d1d5db; padding: 15px; background: #f9fafb; border-radius: 8px;">';
+                    
+                    response.data.forEach(function(disziplin) {
+                        const isChecked = selectedDisziplinen.includes(disziplin.id.toString()) || selectedDisziplinen.includes(parseInt(disziplin.id));
+                        html += '<label style="display: block; margin-bottom: 10px; cursor: pointer; padding: 10px; border-radius: 6px; transition: background-color 0.15s ease; border: 1px solid #e5e7eb;">';
+                        html += '<input type="checkbox" name="disziplinen[]" value="' + disziplin.id + '" ' + (isChecked ? 'checked' : '') + ' style="margin-right: 12px; transform: scale(1.1);">';
+                        html += '<span style="font-weight: 500; color: #111827;">' + escapeHtml(disziplin.name) + '</span>';
+                        
+                        // Kategorie-Badge hinzufügen
+                        if (disziplin.kategorie && disziplin.kategorie !== '') {
+                            html += ' <span style="display: inline-block; margin-left: 8px; padding: 2px 6px; background: #e5e7eb; color: #374151; border-radius: 10px; font-size: 10px; font-weight: 600;">' + escapeHtml(disziplin.kategorie) + '</span>';
+                        }
+                        
+                        if (disziplin.beschreibung && disziplin.beschreibung !== '') {
+                            html += '<br><small style="color: #6b7280; margin-left: 24px; font-style: italic;">' + escapeHtml(disziplin.beschreibung) + '</small>';
+                        }
+                        html += '</label>';
+                    });
+                    
+                    html += '</div>';
+                    html += '<small style="color: #6b7280; font-style: italic; margin-top: 8px; display: block;">Wähle die Disziplinen aus, für die du dich anmelden möchtest. Mindestens eine Disziplin muss ausgewählt werden.</small>';
+                    
+                    container.html(html);
+                    group.show();
+                    
+                    // Hover-Effekte für Labels hinzufügen
+                    container.find('label').hover(
+                        function() { $(this).css('background-color', '#f0f9ff'); },
+                        function() { $(this).css('background-color', 'transparent'); }
+                    );
+                    
+                } else {
+                    // Keine passenden Disziplinen
+                    let message = '<div style="text-align: center; padding: 20px; color: #6b7280; font-style: italic;">';
+                    if (response.user_category) {
+                        message += '⚠️ Für deine Alterskategorie ' + escapeHtml(response.user_category) + ' sind bei diesem Wettkampf keine Disziplinen verfügbar.';
+                        console.log('No disciplines found for category:', response.user_category);
+                    } else {
+                        message += 'Für diesen Wettkampf sind keine spezifischen Disziplinen definiert.';
+                    }
+                    message += '</div>';
+                    
+                    container.html(message);
+                    group.show();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error loading disciplines:', error, xhr.responseText);
+                const container = $('#' + containerId);
+                container.html('<div style="text-align: center; padding: 20px; color: #dc2626;">❌ Fehler beim Laden der Disziplinen. Bitte versuche es erneut.</div>');
+                $('#' + groupId).show();
+            }
+        });
+    }
+    
+    // Angepasste ursprüngliche loadWettkampfDisziplinen Funktion für Rückwärtskompatibilität
+    function loadWettkampfDisziplinen(wettkampfId, containerId, groupId, selectedDisziplinen = []) {
+        // Prüfen ob Jahrgang verfügbar ist
+        const jahrgang = $('#jahrgang').val() || $('#edit_jahrgang').val();
+        
+        if (jahrgang && jahrgang.length === 4) {
+            // Mit Kategorie-Filter laden
+            loadWettkampfDisziplinenWithCategory(wettkampfId, parseInt(jahrgang), containerId, groupId, selectedDisziplinen);
+        } else {
+            // Ohne Kategorie-Filter laden
+            loadWettkampfDisziplinenWithCategory(wettkampfId, null, containerId, groupId, selectedDisziplinen);
+        }
+    }
+    
+    // KORRIGIERTE Event Handler für Jahrgang-Eingabe in Anmeldeformular
     $(document).on('input change', '#jahrgang', function() {
         const jahrgang = parseInt($(this).val());
         const wettkampfId = $('#wettkampf_id').val();
+        
+        console.log('Jahrgang changed:', jahrgang, 'Wettkampf ID:', wettkampfId);
         
         // Kategorie-Anzeige aktualisieren
         const category = updateCategoryDisplay(jahrgang, 'kategorie-text', 'kategorie-anzeige');
         
         // Disziplinen neu laden wenn Jahrgang vollständig und Wettkampf ausgewählt
-        if (jahrgang && jahrgang.toString().length === 4 && wettkampfId) {
-            console.log('Loading disciplines for year:', jahrgang, 'category:', category);
+        if (jahrgang && jahrgang.toString().length === 4 && jahrgang > 1900 && wettkampfId) {
+            console.log('Loading disciplines for year:', jahrgang, 'category:', category, 'wettkampf:', wettkampfId);
             loadWettkampfDisziplinenWithCategory(wettkampfId, jahrgang, 'disziplinen_container', 'disziplinen_group');
         } else {
             // Disziplinen ausblenden wenn Jahrgang unvollständig
             $('#disziplinen_group').hide();
+            console.log('Hiding disciplines - invalid jahrgang or missing wettkampf_id');
         }
     });
     
@@ -238,12 +367,18 @@ jQuery(document).ready(function($) {
         const wettkampfId = $('#edit_anmeldung_id').length ? 
             $('#edit_anmeldung_id').data('wettkampf-id') : null;
         
+        console.log('Edit jahrgang changed:', jahrgang, 'Wettkampf ID:', wettkampfId);
+        
         // Kategorie-Anzeige aktualisieren
         updateCategoryDisplay(jahrgang, 'edit-kategorie-text', 'edit-kategorie-anzeige');
         
         // Disziplinen neu laden wenn möglich
-        if (jahrgang && jahrgang.toString().length === 4 && wettkampfId) {
+        if (jahrgang && jahrgang.toString().length === 4 && jahrgang > 1900 && wettkampfId) {
+            console.log('Loading edit disciplines for year:', jahrgang, 'wettkampf:', wettkampfId);
             loadWettkampfDisziplinenWithCategory(wettkampfId, jahrgang, 'edit_disziplinen_container', 'edit_disziplinen_group');
+        } else {
+            $('#edit_disziplinen_group').hide();
+            console.log('Hiding edit disciplines');
         }
     });
     
@@ -598,118 +733,6 @@ jQuery(document).ready(function($) {
             }
         });
     });
-    
-    // Erweiterte Funktion zum Laden von Disziplinen mit Kategorie-Filter
-    function loadWettkampfDisziplinenWithCategory(wettkampfId, jahrgang, containerId, groupId, selectedDisziplinen = []) {
-        console.log('Loading disciplines with category filter:', {wettkampfId, jahrgang, containerId, groupId});
-        
-        $.ajax({
-            url: wettkampf_ajax.ajax_url,
-            type: 'POST',
-            data: {
-                action: 'get_wettkampf_disziplinen',
-                wettkampf_id: wettkampfId,
-                jahrgang: jahrgang, // WICHTIG: Jahrgang für Kategorie-Filter
-                nonce: wettkampf_ajax.nonce
-            },
-            dataType: 'json',
-            beforeSend: function() {
-                // Loading-Indikator anzeigen
-                $('#' + containerId).html('<div style="text-align: center; padding: 20px;"><span class="spinner"></span> Lade passende Disziplinen...</div>');
-                $('#' + groupId).show();
-            },
-            success: function(response) {
-                console.log('Disciplines AJAX response:', response);
-                
-                if (response.success && response.data && response.data.length > 0) {
-                    const container = $('#' + containerId);
-                    const group = $('#' + groupId);
-                    
-                    // Clear container
-                    container.empty();
-                    
-                    // Kategorie-Info anzeigen
-                    let html = '';
-                    if (response.user_category) {
-                        html += '<div style="margin-bottom: 15px; padding: 12px; background: #e0f2fe; border: 1px solid #0891b2; border-radius: 6px; font-size: 14px;">';
-                        html += '<strong>📋 Verfügbare Disziplinen für Kategorie ' + response.user_category + ':</strong>';
-                        html += '</div>';
-                        
-                        console.log('User category:', response.user_category, 'Disciplines count:', response.data.length);
-                    }
-                    
-                    // Create discipline checkboxes
-                    html += '<div style="max-height: 200px; overflow-y: auto; border: 1px solid #d1d5db; padding: 15px; background: #f9fafb; border-radius: 8px;">';
-                    
-                    response.data.forEach(function(disziplin) {
-                        const isChecked = selectedDisziplinen.includes(disziplin.id.toString()) || selectedDisziplinen.includes(parseInt(disziplin.id));
-                        html += '<label style="display: block; margin-bottom: 10px; cursor: pointer; padding: 10px; border-radius: 6px; transition: background-color 0.15s ease; border: 1px solid #e5e7eb;">';
-                        html += '<input type="checkbox" name="disziplinen[]" value="' + disziplin.id + '" ' + (isChecked ? 'checked' : '') + ' style="margin-right: 12px; transform: scale(1.1);">';
-                        html += '<span style="font-weight: 500; color: #111827;">' + escapeHtml(disziplin.name) + '</span>';
-                        
-                        // Kategorie-Badge hinzufügen
-                        if (disziplin.kategorie) {
-                            html += ' <span style="display: inline-block; margin-left: 8px; padding: 2px 6px; background: #e5e7eb; color: #374151; border-radius: 10px; font-size: 10px; font-weight: 600;">' + escapeHtml(disziplin.kategorie) + '</span>';
-                        }
-                        
-                        if (disziplin.beschreibung) {
-                            html += '<br><small style="color: #6b7280; margin-left: 24px; font-style: italic;">' + escapeHtml(disziplin.beschreibung) + '</small>';
-                        }
-                        html += '</label>';
-                    });
-                    
-                    html += '</div>';
-                    html += '<small style="color: #6b7280; font-style: italic; margin-top: 8px; display: block;">Wähle die Disziplinen aus, für die du dich anmelden möchtest. Mindestens eine Disziplin muss ausgewählt werden.</small>';
-                    
-                    container.html(html);
-                    group.show();
-                    
-                    // Hover-Effekte für Labels hinzufügen
-                    container.find('label').hover(
-                        function() { $(this).css('background-color', '#f0f9ff'); },
-                        function() { $(this).css('background-color', 'transparent'); }
-                    );
-                    
-                } else {
-                    // Keine passenden Disziplinen
-                    const container = $('#' + containerId);
-                    const group = $('#' + groupId);
-                    
-                    let message = '<div style="text-align: center; padding: 20px; color: #6b7280; font-style: italic;">';
-                    if (response.user_category) {
-                        message += '⚠️ Für deine Alterskategorie ' + response.user_category + ' sind bei diesem Wettkampf keine Disziplinen verfügbar.';
-                        console.log('No disciplines found for category:', response.user_category);
-                    } else {
-                        message += 'Für diesen Wettkampf sind keine spezifischen Disziplinen definiert.';
-                    }
-                    message += '</div>';
-                    
-                    container.html(message);
-                    group.show();
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Error loading disciplines:', error, xhr.responseText);
-                const container = $('#' + containerId);
-                container.html('<div style="text-align: center; padding: 20px; color: #dc2626;">❌ Fehler beim Laden der Disziplinen. Bitte versuche es erneut.</div>');
-                $('#' + groupId).show();
-            }
-        });
-    }
-    
-    // Angepasste ursprüngliche loadWettkampfDisziplinen Funktion für Rückwärtskompatibilität
-    function loadWettkampfDisziplinen(wettkampfId, containerId, groupId, selectedDisziplinen = []) {
-        // Prüfen ob Jahrgang verfügbar ist
-        const jahrgang = $('#jahrgang').val() || $('#edit_jahrgang').val();
-        
-        if (jahrgang && jahrgang.length === 4) {
-            // Mit Kategorie-Filter laden
-            loadWettkampfDisziplinenWithCategory(wettkampfId, parseInt(jahrgang), containerId, groupId, selectedDisziplinen);
-        } else {
-            // Ohne Kategorie-Filter laden (alte Methode)
-            loadWettkampfDisziplinenWithCategory(wettkampfId, null, containerId, groupId, selectedDisziplinen);
-        }
-    }
     
     // Helper function to escape HTML
     function escapeHtml(text) {

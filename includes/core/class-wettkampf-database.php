@@ -1,6 +1,6 @@
 <?php
 /**
- * Database operations class
+ * Database operations class - KOMPLETT KORRIGIERT
  */
 
 // Prevent direct access
@@ -66,7 +66,7 @@ class WettkampfDatabase {
     }
     
     /**
-     * Get competition disciplines
+     * KORRIGIERT: Get competition disciplines mit besserem Kategorie-Filter
      */
     public static function get_competition_disciplines($wettkampf_id, $kategorie = null) {
         global $wpdb;
@@ -81,14 +81,35 @@ class WettkampfDatabase {
         
         $params = array($wettkampf_id);
         
-        if ($kategorie) {
-            $query .= " AND (d.kategorie = %s OR d.kategorie = 'Alle')";
+        // KORRIGIERT: Bessere Kategorie-Filterung
+        if ($kategorie && $kategorie !== '') {
+            // Zeige Disziplinen für die spezifische Kategorie ODER für "Alle"
+            $query .= " AND (d.kategorie = %s OR d.kategorie = 'Alle' OR d.kategorie IS NULL OR d.kategorie = '')";
             $params[] = $kategorie;
+            
+            // Debug logging
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("WettkampfDatabase: Filtering disciplines for category '$kategorie' in wettkampf $wettkampf_id");
+            }
         }
         
         $query .= " ORDER BY d.sortierung ASC, d.name ASC";
         
-        return $wpdb->get_results($wpdb->prepare($query, $params));
+        $result = $wpdb->get_results($wpdb->prepare($query, $params));
+        
+        // Debug logging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            $count = is_array($result) ? count($result) : 0;
+            error_log("WettkampfDatabase: Found $count disciplines for wettkampf $wettkampf_id" . ($kategorie ? " with category filter '$kategorie'" : " without category filter"));
+            
+            if ($count > 0 && is_array($result)) {
+                foreach ($result as $discipline) {
+                    error_log("WettkampfDatabase: - Discipline: {$discipline->name} (Category: {$discipline->kategorie})");
+                }
+            }
+        }
+        
+        return $result;
     }
     
     /**
