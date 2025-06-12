@@ -89,7 +89,7 @@ class FrontendForms {
                     </div>
                     
                     <div class="form-group" id="freie_plaetze_group" style="display: none;">
-                        <label for="freie_plaetze">Anzahl freie Plätze (inkl. eigenen Kind/ern)</label>
+                        <label for="freie_plaetze">Anzahl Plätze für Kinder (inkl. eigene)</label>
                         <input type="number" id="freie_plaetze" name="freie_plaetze" min="0" max="10" placeholder="z.B. 2">
                     </div>
                     
