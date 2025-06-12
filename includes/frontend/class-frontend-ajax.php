@@ -1,6 +1,6 @@
 <?php
 /**
- * Frontend AJAX functionality - KOMPLETT KORRIGIERT
+ * Frontend AJAX functionality - VOLLSTÄNDIG KORRIGIERT UND VEREINFACHT
  */
 
 // Prevent direct access
@@ -258,68 +258,133 @@ class FrontendAjax {
     }
     
     /**
-     * KORRIGIERT: Get competition disciplines with category filter
+     * VEREINFACHTE UND ROBUSTE VERSION: Get competition disciplines with category filter
      */
     public function get_wettkampf_disziplinen() {
-        // Verify nonce
-        if (!isset($_POST['nonce']) || !SecurityManager::verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Sicherheitsfehler')));
+        // Debug-Start
+        error_log('WETTKAMPF AJAX: get_wettkampf_disziplinen called');
+        error_log('WETTKAMPF AJAX: POST data: ' . print_r($_POST, true));
+        
+        // Basis-Sicherheitsprüfung - VEREINFACHT
+        if (!isset($_POST['nonce'])) {
+            error_log('WETTKAMPF AJAX: No nonce provided');
+            wp_die(json_encode(array('success' => false, 'message' => 'Nonce fehlt')));
         }
         
-        $wettkampf_id = intval($_POST['wettkampf_id']);
-        $jahrgang = isset($_POST['jahrgang']) && !empty($_POST['jahrgang']) ? intval($_POST['jahrgang']) : null;
-        
-        // Debug logging
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log("Wettkampf AJAX: Loading disciplines for wettkampf_id=$wettkampf_id, jahrgang=$jahrgang");
+        if (!wp_verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
+            error_log('WETTKAMPF AJAX: Invalid nonce');
+            wp_die(json_encode(array('success' => false, 'message' => 'Ungültige Nonce')));
         }
         
-        if (empty($wettkampf_id)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Wettkampf ID fehlt')));
+        // Parameter extrahieren
+        $wettkampf_id = isset($_POST['wettkampf_id']) ? intval($_POST['wettkampf_id']) : 0;
+        $jahrgang = isset($_POST['jahrgang']) ? intval($_POST['jahrgang']) : 0;
+        
+        error_log("WETTKAMPF AJAX: wettkampf_id=$wettkampf_id, jahrgang=$jahrgang");
+        
+        if ($wettkampf_id <= 0) {
+            error_log('WETTKAMPF AJAX: Invalid wettkampf_id');
+            wp_die(json_encode(array('success' => false, 'message' => 'Ungültige Wettkampf-ID')));
         }
         
+        // Kategorie berechnen
         $user_category = null;
-        if ($jahrgang && $jahrgang > 1900) {
-            $user_category = CategoryCalculator::calculate($jahrgang);
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Wettkampf AJAX: Calculated user category: $user_category for year $jahrgang");
+        if ($jahrgang > 1900) {
+            // Prüfe ob CategoryCalculator existiert
+            if (class_exists('CategoryCalculator')) {
+                $user_category = CategoryCalculator::calculate($jahrgang);
+                error_log("WETTKAMPF AJAX: Calculated category: $user_category");
+            } else {
+                error_log('WETTKAMPF AJAX: CategoryCalculator class not found');
+                // Fallback Kategorie-Berechnung
+                $current_year = date('Y');
+                $age = $current_year - $jahrgang;
+                if ($age < 10) $user_category = 'U10';
+                elseif ($age < 12) $user_category = 'U12';
+                elseif ($age < 14) $user_category = 'U14';
+                elseif ($age < 16) $user_category = 'U16';
+                else $user_category = 'U18';
+                error_log("WETTKAMPF AJAX: Fallback category: $user_category");
             }
         }
         
-        // Get disciplines for this competition with category filter
-        $disciplines = WettkampfDatabase::get_competition_disciplines($wettkampf_id, $user_category);
-        
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log("Wettkampf AJAX: Found " . count($disciplines) . " disciplines");
-        }
-        
-        // Convert to array format for JSON response
-        $disciplines_array = array();
-        if (is_array($disciplines) && !empty($disciplines)) {
-            foreach ($disciplines as $discipline) {
-                if (is_object($discipline)) {
-                    $disciplines_array[] = array(
-                        'id' => intval($discipline->id),
-                        'name' => sanitize_text_field($discipline->name),
-                        'beschreibung' => sanitize_text_field($discipline->beschreibung),
-                        'kategorie' => sanitize_text_field($discipline->kategorie)
-                    );
+        try {
+            // Disziplinen laden - mit Fallback
+            $disciplines = array();
+            
+            if (class_exists('WettkampfDatabase')) {
+                $disciplines = WettkampfDatabase::get_competition_disciplines($wettkampf_id, $user_category);
+                error_log('WETTKAMPF AJAX: Found ' . count($disciplines) . ' disciplines via WettkampfDatabase');
+            } else {
+                // Fallback: Direkte Datenbankabfrage
+                error_log('WETTKAMPF AJAX: WettkampfDatabase not found, using fallback');
+                global $wpdb;
+                
+                $query = "
+                    SELECT d.* 
+                    FROM {$wpdb->prefix}wettkampf_disziplin_zuordnung z 
+                    JOIN {$wpdb->prefix}wettkampf_disziplinen d ON z.disziplin_id = d.id 
+                    WHERE z.wettkampf_id = %d AND d.aktiv = 1
+                ";
+                
+                $params = array($wettkampf_id);
+                
+                if ($user_category && $user_category !== '') {
+                    $query .= " AND (d.kategorie = %s OR d.kategorie = 'Alle' OR d.kategorie IS NULL OR d.kategorie = '')";
+                    $params[] = $user_category;
+                }
+                
+                $query .= " ORDER BY d.sortierung ASC, d.name ASC";
+                
+                $disciplines = $wpdb->get_results($wpdb->prepare($query, $params));
+                error_log('WETTKAMPF AJAX: Found ' . count($disciplines) . ' disciplines via fallback query');
+            }
+            
+            // Daten für JSON vorbereiten
+            $disciplines_array = array();
+            if (is_array($disciplines)) {
+                foreach ($disciplines as $discipline) {
+                    if (is_object($discipline) && isset($discipline->id)) {
+                        $disciplines_array[] = array(
+                            'id' => intval($discipline->id),
+                            'name' => isset($discipline->name) ? sanitize_text_field($discipline->name) : '',
+                            'beschreibung' => isset($discipline->beschreibung) ? sanitize_text_field($discipline->beschreibung) : '',
+                            'kategorie' => isset($discipline->kategorie) ? sanitize_text_field($discipline->kategorie) : 'Alle'
+                        );
+                    }
                 }
             }
+            
+            $response = array(
+                'success' => true,
+                'data' => $disciplines_array,
+                'user_category' => $user_category,
+                'wettkampf_id' => $wettkampf_id,
+                'jahrgang' => $jahrgang,
+                'debug_info' => array(
+                    'found_disciplines' => count($disciplines_array),
+                    'calculated_category' => $user_category,
+                    'query_params' => array(
+                        'wettkampf_id' => $wettkampf_id,
+                        'jahrgang' => $jahrgang
+                    )
+                )
+            );
+            
+            error_log('WETTKAMPF AJAX: Sending success response with ' . count($disciplines_array) . ' disciplines');
+            wp_die(json_encode($response));
+            
+        } catch (Exception $e) {
+            error_log('WETTKAMPF AJAX: Exception caught: ' . $e->getMessage());
+            wp_die(json_encode(array(
+                'success' => false, 
+                'message' => 'Datenbankfehler: ' . $e->getMessage(),
+                'debug_info' => array(
+                    'exception' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                )
+            )));
         }
-        
-        $response_data = array(
-            'success' => true, 
-            'data' => $disciplines_array,
-            'user_category' => $user_category,
-            'wettkampf_id' => $wettkampf_id,
-            'jahrgang' => $jahrgang
-        );
-        
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log("Wettkampf AJAX: Sending response: " . json_encode($response_data));
-        }
-        
-        wp_die(json_encode($response_data));
     }
 }
