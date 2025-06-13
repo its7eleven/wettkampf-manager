@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin activation and deactivation handler
+ * Plugin activation and deactivation handler - ERWEITERT mit Transport-Optionen
  */
 
 // Prevent direct access
@@ -30,7 +30,7 @@ class WettkampfActivator {
     }
     
     /**
-     * Create database tables
+     * Create database tables - ERWEITERT mit Transport-Optionen
      */
     private static function create_tables() {
         global $wpdb;
@@ -39,7 +39,7 @@ class WettkampfActivator {
         
         $charset_collate = $wpdb->get_charset_collate();
         
-        // Wettkämpfe Tabelle
+        // Wettkaempfe Tabelle
         $table_wettkampf = $wpdb->prefix . 'wettkampf';
         $sql_wettkampf = "CREATE TABLE $table_wettkampf (
             id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -87,7 +87,7 @@ class WettkampfActivator {
             FOREIGN KEY (disziplin_id) REFERENCES $table_disziplinen(id) ON DELETE CASCADE
         ) $charset_collate;";
         
-        // Anmeldungen Tabelle
+        // Anmeldungen Tabelle - ERWEITERT mit ENUM fuer Transport-Optionen
         $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
         $sql_anmeldung = "CREATE TABLE $table_anmeldung (
             id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -95,9 +95,9 @@ class WettkampfActivator {
             vorname varchar(100) NOT NULL,
             name varchar(100) NOT NULL,
             email varchar(255) NOT NULL,
-            geschlecht enum('männlich','weiblich','divers') NOT NULL,
+            geschlecht enum('maennlich','weiblich','divers') NOT NULL,
             jahrgang year NOT NULL,
-            eltern_fahren tinyint(1) DEFAULT 0,
+            eltern_fahren enum('ja','nein','direkt') NOT NULL DEFAULT 'nein',
             freie_plaetze int DEFAULT 0,
             anmeldedatum datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -105,6 +105,7 @@ class WettkampfActivator {
             INDEX idx_wettkampf_id (wettkampf_id),
             INDEX idx_email (email),
             INDEX idx_anmeldedatum (anmeldedatum),
+            INDEX idx_eltern_fahren (eltern_fahren),
             FOREIGN KEY (wettkampf_id) REFERENCES $table_wettkampf(id) ON DELETE CASCADE
         ) $charset_collate;";
         
@@ -151,8 +152,8 @@ class WettkampfActivator {
         
         $default_disziplinen = array(
             // U10 Disziplinen
-            array('name' => '50m Sprint', 'beschreibung' => '50 Meter Sprint für die Jüngsten', 'kategorie' => 'U10', 'sortierung' => 10),
-            array('name' => 'Ballwurf', 'beschreibung' => 'Ballwurf für U10', 'kategorie' => 'U10', 'sortierung' => 80),
+            array('name' => '50m Sprint', 'beschreibung' => '50 Meter Sprint fuer die Juengsten', 'kategorie' => 'U10', 'sortierung' => 10),
+            array('name' => 'Ballwurf', 'beschreibung' => 'Ballwurf fuer U10', 'kategorie' => 'U10', 'sortierung' => 80),
             array('name' => 'Weitsprung Zone', 'beschreibung' => 'Weitsprung aus der Zone', 'kategorie' => 'U10', 'sortierung' => 60),
             
             // U12 Disziplinen
@@ -173,8 +174,8 @@ class WettkampfActivator {
             array('name' => '3000m', 'beschreibung' => '3000 Meter Lauf', 'kategorie' => 'U18', 'sortierung' => 55),
             
             // Alle Kategorien
-            array('name' => 'Weitsprung', 'beschreibung' => 'Weitsprung für alle Kategorien', 'kategorie' => 'Alle', 'sortierung' => 65),
-            array('name' => 'Hochsprung', 'beschreibung' => 'Hochsprung für alle Kategorien', 'kategorie' => 'Alle', 'sortierung' => 70)
+            array('name' => 'Weitsprung', 'beschreibung' => 'Weitsprung fuer alle Kategorien', 'kategorie' => 'Alle', 'sortierung' => 65),
+            array('name' => 'Hochsprung', 'beschreibung' => 'Hochsprung fuer alle Kategorien', 'kategorie' => 'Alle', 'sortierung' => 70)
         );
         
         foreach ($default_disziplinen as $disziplin) {
@@ -186,7 +187,7 @@ class WettkampfActivator {
      * Create default pages
      */
     private static function create_pages() {
-        $page_title = 'Wettkämpfe';
+        $page_title = 'Wettkaempfe';
         $page_content = '[wettkampf_liste]';
         $page_check = get_page_by_title($page_title);
         
@@ -223,5 +224,31 @@ class WettkampfActivator {
     private static function set_default_options() {
         add_option('wettkampf_sender_email', get_option('admin_email'));
         add_option('wettkampf_sender_name', get_option('blogname'));
+    }
+    
+    /**
+     * NEUE Funktion: Update bestehende Datenbank fuer Transport-Optionen
+     */
+    public static function update_database_for_transport_options() {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'wettkampf_anmeldung';
+        
+        // Check current column type
+        $column_info = $wpdb->get_row("SHOW COLUMNS FROM $table_name LIKE 'eltern_fahren'");
+        
+        if ($column_info) {
+            // If column exists but is not ENUM, update it
+            if (strpos($column_info->Type, 'enum') === false) {
+                // First update existing data
+                $wpdb->query("UPDATE $table_name SET eltern_fahren = 'ja' WHERE eltern_fahren = '1'");
+                $wpdb->query("UPDATE $table_name SET eltern_fahren = 'nein' WHERE eltern_fahren = '0'");
+                
+                // Then modify column to ENUM
+                $wpdb->query("ALTER TABLE $table_name MODIFY COLUMN eltern_fahren ENUM('ja','nein','direkt') NOT NULL DEFAULT 'nein'");
+                
+                error_log('Wettkampf Manager: eltern_fahren column updated to support transport options');
+            }
+        }
     }
 }

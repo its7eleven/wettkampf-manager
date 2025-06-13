@@ -1,6 +1,6 @@
 <?php
 /**
- * Database operations class - KOMPLETT KORRIGIERT
+ * Database operations class - ERWEITERT mit "wir fahren direkt" Option
  */
 
 // Prevent direct access
@@ -66,7 +66,7 @@ class WettkampfDatabase {
     }
     
     /**
-     * KORRIGIERT: Get competition disciplines mit besserem Kategorie-Filter
+     * Get competition disciplines mit besserem Kategorie-Filter
      */
     public static function get_competition_disciplines($wettkampf_id, $kategorie = null) {
         global $wpdb;
@@ -81,9 +81,9 @@ class WettkampfDatabase {
         
         $params = array($wettkampf_id);
         
-        // KORRIGIERT: Bessere Kategorie-Filterung
+        // Bessere Kategorie-Filterung
         if ($kategorie && $kategorie !== '') {
-            // Zeige Disziplinen für die spezifische Kategorie ODER für "Alle"
+            // Zeige Disziplinen fuer die spezifische Kategorie ODER fuer "Alle"
             $query .= " AND (d.kategorie = %s OR d.kategorie = 'Alle' OR d.kategorie IS NULL OR d.kategorie = '')";
             $params[] = $kategorie;
             
@@ -277,11 +277,20 @@ class WettkampfDatabase {
     }
     
     /**
-     * Save registration
+     * Save registration - ERWEITERT mit Transport-Optionen
      */
     public static function save_registration($data, $id = null) {
         global $wpdb;
         $tables = self::get_table_names();
+        
+        // ERWEITERTE Logik fuer eltern_fahren und freie_plaetze
+        $eltern_fahren = sanitize_text_field($data['eltern_fahren']);
+        $freie_plaetze = 0;
+        
+        // Nur bei "ja" sollen freie Plaetze gespeichert werden
+        if ($eltern_fahren === 'ja') {
+            $freie_plaetze = intval($data['freie_plaetze']);
+        }
         
         $registration_data = array(
             'wettkampf_id' => intval($data['wettkampf_id']),
@@ -290,8 +299,8 @@ class WettkampfDatabase {
             'email' => sanitize_email($data['email']),
             'geschlecht' => sanitize_text_field($data['geschlecht']),
             'jahrgang' => intval($data['jahrgang']),
-            'eltern_fahren' => intval($data['eltern_fahren']),
-            'freie_plaetze' => (intval($data['eltern_fahren']) === 1) ? intval($data['freie_plaetze']) : 0
+            'eltern_fahren' => $eltern_fahren,
+            'freie_plaetze' => $freie_plaetze
         );
         
         if ($id) {
