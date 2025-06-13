@@ -1,6 +1,6 @@
 <?php
 /**
- * Registration management admin class - ERWEITERT mit "wir fahren direkt" Option
+ * Registration management admin class - KORRIGIERT mit funktionierender Bearbeitung
  */
 
 // Prevent direct access
@@ -161,7 +161,7 @@ class AdminAnmeldungen {
                             
                             $user_category = CategoryCalculator::calculate($anmeldung->jahrgang);
                             
-                            // ERWEITERTE Transport-Anzeige
+                            // Transport-Anzeige
                             $transport_display = $this->get_transport_display($anmeldung->eltern_fahren);
                             ?>
                             <tr>
@@ -224,7 +224,7 @@ class AdminAnmeldungen {
     }
     
     /**
-     * ERWEITERTE Funktion fuer Transport-Anzeige
+     * Funktion fuer Transport-Anzeige
      */
     private function get_transport_display($eltern_fahren) {
         switch ($eltern_fahren) {
@@ -245,7 +245,7 @@ class AdminAnmeldungen {
                 );
             default:
                 // Fallback fuer alte Eintraege (1/0)
-                if ($eltern_fahren == 1) {
+                if ($eltern_fahren == 1 || $eltern_fahren == '1') {
                     return array(
                         'badge' => WettkampfHelpers::get_status_badge('active', '✓ Ja'),
                         'text' => 'Ja'
@@ -268,6 +268,7 @@ class AdminAnmeldungen {
             <h2>Anmeldung bearbeiten: <?php echo SecurityManager::escape_html($edit_anmeldung->vorname . ' ' . $edit_anmeldung->name); ?></h2>
             <form method="post">
                 <input type="hidden" name="anmeldung_id" value="<?php echo $edit_anmeldung->id; ?>">
+                <input type="hidden" name="wettkampf_id" value="<?php echo $edit_anmeldung->wettkampf_id; ?>">
                 <?php wp_nonce_field('save_anmeldung', 'anmeldung_nonce'); ?>
                 
                 <table class="form-table">
@@ -327,13 +328,33 @@ class AdminAnmeldungen {
         <script>
         function toggleFreePlaetze(radio) {
             var row = document.getElementById('freie_plaetze_row');
-            if (radio.value === 'ja') {
+            var input = document.getElementById('freie_plaetze');
+            
+            if (radio && radio.value === 'ja') {
                 row.style.display = '';
+                input.setAttribute('required', 'required');
             } else {
                 row.style.display = 'none';
-                document.getElementById('freie_plaetze').value = '';
+                input.removeAttribute('required');
+                input.value = '';
             }
         }
+        
+        // Attach event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            var radios = document.querySelectorAll('input[name="eltern_fahren"]');
+            radios.forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                    toggleFreePlaetze(this);
+                });
+            });
+            
+            // Initialize on load
+            var checkedRadio = document.querySelector('input[name="eltern_fahren"]:checked');
+            if (checkedRadio) {
+                toggleFreePlaetze(checkedRadio);
+            }
+        });
         </script>
         <?php
     }
@@ -344,8 +365,7 @@ class AdminAnmeldungen {
     private function render_gender_select($selected) {
         $options = array(
             'maennlich' => 'Maennlich',
-            'weiblich' => 'Weiblich',
-            'divers' => 'Divers'
+            'weiblich' => 'Weiblich'
         );
         
         $html = '<select id="geschlecht" name="geschlecht" required>';
@@ -356,31 +376,21 @@ class AdminAnmeldungen {
     }
     
     /**
-     * ERWEITERTE Funktion fuer Transport-Optionen
+     * Funktion fuer Transport-Optionen
      */
     private function render_transport_options($anmeldung) {
-        $html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-        $html .= '<label><input type="radio" name="eltern_fahren" value="ja" ' . checked($anmeldung->eltern_fahren, 'ja', false) . ' onchange="toggleFreePlaetze(this)"> Ja, koennen andere Kinder mitnehmen</label>';
-        $html .= '<label><input type="radio" name="eltern_fahren" value="nein" ' . checked($anmeldung->eltern_fahren, 'nein', false) . ' onchange="toggleFreePlaetze(this)"> Nein, brauchen eine Mitfahrgelegenheit</label>';
-        $html .= '<label><input type="radio" name="eltern_fahren" value="direkt" ' . checked($anmeldung->eltern_fahren, 'direkt', false) . ' onchange="toggleFreePlaetze(this)"> Wir fahren direkt zum Wettkampf</label>';
-        
-        // Fallback fuer alte Eintraege
-        if (!in_array($anmeldung->eltern_fahren, ['ja', 'nein', 'direkt'])) {
-            if ($anmeldung->eltern_fahren == 1) {
-                $html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-                $html .= '<label><input type="radio" name="eltern_fahren" value="ja" checked onchange="toggleFreePlaetze(this)"> Ja, koennen andere Kinder mitnehmen</label>';
-                $html .= '<label><input type="radio" name="eltern_fahren" value="nein" onchange="toggleFreePlaetze(this)"> Nein, brauchen eine Mitfahrgelegenheit</label>';
-                $html .= '<label><input type="radio" name="eltern_fahren" value="direkt" onchange="toggleFreePlaetze(this)"> Wir fahren direkt zum Wettkampf</label>';
-                $html .= '</div>';
-            } else {
-                $html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-                $html .= '<label><input type="radio" name="eltern_fahren" value="ja" onchange="toggleFreePlaetze(this)"> Ja, koennen andere Kinder mitnehmen</label>';
-                $html .= '<label><input type="radio" name="eltern_fahren" value="nein" checked onchange="toggleFreePlaetze(this)"> Nein, brauchen eine Mitfahrgelegenheit</label>';
-                $html .= '<label><input type="radio" name="eltern_fahren" value="direkt" onchange="toggleFreePlaetze(this)"> Wir fahren direkt zum Wettkampf</label>';
-                $html .= '</div>';
-            }
+        // Convert old values
+        $current_value = $anmeldung->eltern_fahren;
+        if ($current_value == '1' || $current_value == 1) {
+            $current_value = 'ja';
+        } elseif ($current_value == '0' || $current_value == 0) {
+            $current_value = 'nein';
         }
         
+        $html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+        $html .= '<label><input type="radio" name="eltern_fahren" value="ja" ' . checked($current_value, 'ja', false) . ' onchange="toggleFreePlaetze(this)"> Ja, koennen andere Kinder mitnehmen</label>';
+        $html .= '<label><input type="radio" name="eltern_fahren" value="nein" ' . checked($current_value, 'nein', false) . ' onchange="toggleFreePlaetze(this)"> Nein, brauchen eine Mitfahrgelegenheit</label>';
+        $html .= '<label><input type="radio" name="eltern_fahren" value="direkt" ' . checked($current_value, 'direkt', false) . ' onchange="toggleFreePlaetze(this)"> Wir fahren direkt zum Wettkampf</label>';
         $html .= '</div>';
         
         return $html;
@@ -448,12 +458,13 @@ class AdminAnmeldungen {
     }
     
     /**
-     * Save registration - ERWEITERT mit Transport-Optionen
+     * Save registration
      */
     private function save_anmeldung() {
         SecurityManager::check_admin_permissions();
         
         $anmeldung_id = intval($_POST['anmeldung_id']);
+        $wettkampf_id = intval($_POST['wettkampf_id']);
         
         // Sanitize data
         $sanitization_rules = array(
@@ -468,6 +479,9 @@ class AdminAnmeldungen {
         );
         
         $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
+        
+        // Add wettkampf_id to data
+        $data['wettkampf_id'] = $wettkampf_id;
         
         // Validation
         $validation_rules = array(
@@ -486,6 +500,11 @@ class AdminAnmeldungen {
         if (!$validation['valid']) {
             WettkampfHelpers::add_admin_notice('Validierungsfehler: ' . implode(', ', $validation['errors']), 'error');
             return;
+        }
+        
+        // Handle freie_plaetze
+        if ($data['eltern_fahren'] !== 'ja') {
+            $data['freie_plaetze'] = 0;
         }
         
         $result = WettkampfDatabase::save_registration($data, $anmeldung_id);
