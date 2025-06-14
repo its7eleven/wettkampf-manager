@@ -15,6 +15,7 @@ class WettkampfActivator {
      */
     public static function activate() {
         self::create_tables();
+        self::update_existing_tables(); // NEU: Update bestehende Tabellen
         self::create_pages();
         self::setup_cron_jobs();
         self::set_default_options();
@@ -39,7 +40,7 @@ class WettkampfActivator {
         
         $charset_collate = $wpdb->get_charset_collate();
         
-        // Wettkaempfe Tabelle
+        // Wettkämpfe Tabelle
         $table_wettkampf = $wpdb->prefix . 'wettkampf';
         $sql_wettkampf = "CREATE TABLE $table_wettkampf (
             id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -87,7 +88,7 @@ class WettkampfActivator {
             FOREIGN KEY (disziplin_id) REFERENCES $table_disziplinen(id) ON DELETE CASCADE
         ) $charset_collate;";
         
-        // Anmeldungen Tabelle - ERWEITERT mit ENUM fuer Transport-Optionen
+        // Anmeldungen Tabelle - ERWEITERT mit ENUM für Transport-Optionen
         $table_anmeldung = $wpdb->prefix . 'wettkampf_anmeldung';
         $sql_anmeldung = "CREATE TABLE $table_anmeldung (
             id mediumint(9) NOT NULL AUTO_INCREMENT,
@@ -137,6 +138,54 @@ class WettkampfActivator {
     }
     
     /**
+     * Update existing tables - NEU
+     */
+    private static function update_existing_tables() {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'wettkampf_anmeldung';
+        
+        // Check current column type
+        $column_info = $wpdb->get_row("SHOW COLUMNS FROM $table_name LIKE 'eltern_fahren'");
+        
+        if ($column_info && strpos($column_info->Type, "enum('ja','nein','direkt')") === false) {
+            // Update column to new ENUM type
+            WettkampfHelpers::log_error('Updating eltern_fahren column to ENUM type');
+            
+            // Create temporary column
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN eltern_fahren_temp VARCHAR(20) AFTER eltern_fahren");
+            
+            // Copy and convert data
+            $wpdb->query("UPDATE $table_name SET eltern_fahren_temp = 
+                CASE 
+                    WHEN eltern_fahren = '1' THEN 'ja'
+                    WHEN eltern_fahren = '0' THEN 'nein'
+                    WHEN eltern_fahren = 1 THEN 'ja'
+                    WHEN eltern_fahren = 0 THEN 'nein'
+                    WHEN eltern_fahren = 'ja' THEN 'ja'
+                    WHEN eltern_fahren = 'nein' THEN 'nein'
+                    WHEN eltern_fahren = 'direkt' THEN 'direkt'
+                    ELSE 'nein'
+                END
+            ");
+            
+            // Drop old column
+            $wpdb->query("ALTER TABLE $table_name DROP COLUMN eltern_fahren");
+            
+            // Create new ENUM column
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN eltern_fahren ENUM('ja','nein','direkt') NOT NULL DEFAULT 'nein' AFTER jahrgang");
+            
+            // Copy data back
+            $wpdb->query("UPDATE $table_name SET eltern_fahren = eltern_fahren_temp");
+            
+            // Drop temporary column
+            $wpdb->query("ALTER TABLE $table_name DROP COLUMN eltern_fahren_temp");
+            
+            WettkampfHelpers::log_error('eltern_fahren column updated successfully');
+        }
+    }
+    
+    /**
      * Insert default disciplines
      */
     private static function insert_default_disciplines() {
@@ -152,8 +201,8 @@ class WettkampfActivator {
         
         $default_disziplinen = array(
             // U10 Disziplinen
-            array('name' => '50m Sprint', 'beschreibung' => '50 Meter Sprint fuer die Juengsten', 'kategorie' => 'U10', 'sortierung' => 10),
-            array('name' => 'Ballwurf', 'beschreibung' => 'Ballwurf fuer U10', 'kategorie' => 'U10', 'sortierung' => 80),
+            array('name' => '50m Sprint', 'beschreibung' => '50 Meter Sprint für die Jüngsten', 'kategorie' => 'U10', 'sortierung' => 10),
+            array('name' => 'Ballwurf', 'beschreibung' => 'Ballwurf für U10', 'kategorie' => 'U10', 'sortierung' => 80),
             array('name' => 'Weitsprung Zone', 'beschreibung' => 'Weitsprung aus der Zone', 'kategorie' => 'U10', 'sortierung' => 60),
             
             // U12 Disziplinen
@@ -174,8 +223,8 @@ class WettkampfActivator {
             array('name' => '3000m', 'beschreibung' => '3000 Meter Lauf', 'kategorie' => 'U18', 'sortierung' => 55),
             
             // Alle Kategorien
-            array('name' => 'Weitsprung', 'beschreibung' => 'Weitsprung fuer alle Kategorien', 'kategorie' => 'Alle', 'sortierung' => 65),
-            array('name' => 'Hochsprung', 'beschreibung' => 'Hochsprung fuer alle Kategorien', 'kategorie' => 'Alle', 'sortierung' => 70)
+            array('name' => 'Weitsprung', 'beschreibung' => 'Weitsprung für alle Kategorien', 'kategorie' => 'Alle', 'sortierung' => 65),
+            array('name' => 'Hochsprung', 'beschreibung' => 'Hochsprung für alle Kategorien', 'kategorie' => 'Alle', 'sortierung' => 70)
         );
         
         foreach ($default_disziplinen as $disziplin) {
@@ -187,7 +236,7 @@ class WettkampfActivator {
      * Create default pages
      */
     private static function create_pages() {
-        $page_title = 'Wettkaempfe';
+        $page_title = 'Wettkämpfe';
         $page_content = '[wettkampf_liste]';
         $page_check = get_page_by_title($page_title);
         
@@ -224,31 +273,5 @@ class WettkampfActivator {
     private static function set_default_options() {
         add_option('wettkampf_sender_email', get_option('admin_email'));
         add_option('wettkampf_sender_name', get_option('blogname'));
-    }
-    
-    /**
-     * NEUE Funktion: Update bestehende Datenbank fuer Transport-Optionen
-     */
-    public static function update_database_for_transport_options() {
-        global $wpdb;
-        
-        $table_name = $wpdb->prefix . 'wettkampf_anmeldung';
-        
-        // Check current column type
-        $column_info = $wpdb->get_row("SHOW COLUMNS FROM $table_name LIKE 'eltern_fahren'");
-        
-        if ($column_info) {
-            // If column exists but is not ENUM, update it
-            if (strpos($column_info->Type, 'enum') === false) {
-                // First update existing data
-                $wpdb->query("UPDATE $table_name SET eltern_fahren = 'ja' WHERE eltern_fahren = '1'");
-                $wpdb->query("UPDATE $table_name SET eltern_fahren = 'nein' WHERE eltern_fahren = '0'");
-                
-                // Then modify column to ENUM
-                $wpdb->query("ALTER TABLE $table_name MODIFY COLUMN eltern_fahren ENUM('ja','nein','direkt') NOT NULL DEFAULT 'nein'");
-                
-                error_log('Wettkampf Manager: eltern_fahren column updated to support transport options');
-            }
-        }
     }
 }
