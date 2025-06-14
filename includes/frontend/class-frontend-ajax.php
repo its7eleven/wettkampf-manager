@@ -1,18 +1,11 @@
 <?php
 /**
- * Frontend AJAX functionality - DEBUG VERSION
+ * Frontend AJAX functionality
  */
 
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
-}
-
-// TEMPORÄRER DEBUG-CODE - Verhindere Output-Fehler bei AJAX
-if (isset($_POST['action']) && strpos($_POST['action'], 'wettkampf') !== false) {
-    error_reporting(0);
-    ini_set('display_errors', 0);
-    ob_start();
 }
 
 class FrontendAjax {
@@ -35,12 +28,6 @@ class FrontendAjax {
      * Send JSON response and exit
      */
     private function send_json_response($data) {
-        // Clear any output that might have been generated
-        $output = ob_get_clean();
-        if (!empty($output)) {
-            error_log('Wettkampf AJAX Unexpected Output: ' . $output);
-        }
-        
         wp_send_json($data);
         exit;
     }
@@ -82,7 +69,7 @@ class FrontendAjax {
                 $this->send_json_error('Zu viele Anmeldeversuche. Bitte warte 10 Minuten.');
             }
             
-            // TEMPORÄR: reCAPTCHA optional machen für Debug
+            // Verify reCAPTCHA if configured
             $recaptcha_site_key = get_option('wettkampf_recaptcha_site_key');
             if (!empty($recaptcha_site_key)) {
                 $recaptcha_response = isset($_POST['g-recaptcha-response']) ? $_POST['g-recaptcha-response'] : '';
@@ -109,9 +96,6 @@ class FrontendAjax {
             );
             
             $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
-            
-            // Debug log
-            error_log('Wettkampf Anmeldung Data: ' . print_r($data, true));
             
             // Check for duplicates
             if (SecurityManager::check_duplicate_registration($data['wettkampf_id'], $data['email'], $data['vorname'], $data['jahrgang'])) {
@@ -149,7 +133,6 @@ class FrontendAjax {
                     $email_manager = new EmailManager();
                     $email_manager->send_confirmation_email($anmeldung_id);
                 } catch (Exception $e) {
-                    error_log('Email send failed: ' . $e->getMessage());
                     // Continue anyway - registration was successful
                 }
                 
@@ -162,7 +145,6 @@ class FrontendAjax {
             }
             
         } catch (Exception $e) {
-            error_log('Wettkampf Anmeldung Exception: ' . $e->getMessage());
             $this->send_json_error('Ein unerwarteter Fehler ist aufgetreten: ' . $e->getMessage());
         }
     }
@@ -187,7 +169,6 @@ class FrontendAjax {
                 $this->update_registration($anmeldung_id);
             }
         } catch (Exception $e) {
-            error_log('Wettkampf Mutation Exception: ' . $e->getMessage());
             $this->send_json_error('Ein Fehler ist aufgetreten: ' . $e->getMessage());
         }
     }
@@ -198,7 +179,7 @@ class FrontendAjax {
     private function verify_registration_ownership($anmeldung_id) {
         // Rate limiting
         if (!SecurityManager::check_rate_limit('mutation_verify', 5, 600)) {
-            $this->send_json_error('Zu viele Versuche. Bitte warten Sie 10 Minuten.');
+            $this->send_json_error('Zu viele Versuche. Bitte warte 10 Minuten.');
         }
         
         $verify_email = sanitize_email($_POST['verify_email']);
@@ -306,7 +287,7 @@ class FrontendAjax {
             
             // Rate limiting
             if (!SecurityManager::check_rate_limit('view_only', 5, 600)) {
-                $this->send_json_error('Zu viele Versuche. Bitte warten Sie 10 Minuten.');
+                $this->send_json_error('Zu viele Versuche. Bitte warte 10 Minuten.');
             }
             
             $verify_email = sanitize_email($_POST['verify_email']);
@@ -346,7 +327,6 @@ class FrontendAjax {
             $this->send_json_success('Daten geladen', $anmeldung);
             
         } catch (Exception $e) {
-            error_log('Wettkampf View Exception: ' . $e->getMessage());
             $this->send_json_error('Ein Fehler ist aufgetreten: ' . $e->getMessage());
         }
     }
@@ -356,10 +336,6 @@ class FrontendAjax {
      */
     public function get_wettkampf_disziplinen() {
         try {
-            // Disable error output for AJAX
-            error_reporting(0);
-            @ini_set('display_errors', 0);
-            
             // Verify nonce
             if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
                 $this->send_json_error('Sicherheitsfehler: Ungültige Nonce');
@@ -446,13 +422,5 @@ class FrontendAjax {
         } catch (Exception $e) {
             $this->send_json_error('Datenbankfehler: ' . $e->getMessage());
         }
-    }
-}
-
-// TEMPORÄRER DEBUG-CODE - Bereinige Output bei AJAX-Requests
-if (isset($_POST['action']) && strpos($_POST['action'], 'wettkampf') !== false) {
-    $debug_output = ob_get_contents();
-    if (!empty($debug_output)) {
-        error_log('Wettkampf AJAX Debug Output: ' . $debug_output);
     }
 }

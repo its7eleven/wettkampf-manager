@@ -1,6 +1,6 @@
 <?php
 /**
- * Frontend display functionality
+ * Frontend display functionality - Verbessert mit integrierten Disziplinen
  */
 
 // Prevent direct access
@@ -233,7 +233,7 @@ class FrontendDisplay {
     }
     
     /**
-     * Render single participant item
+     * Render single participant item - VERBESSERT mit integrierter Disziplinen-Anzeige
      */
     private function render_participant_item($anmeldung, $wettkampf) {
         $user_category = CategoryCalculator::calculate($anmeldung->jahrgang);
@@ -241,56 +241,56 @@ class FrontendDisplay {
         
         ob_start();
         ?>
-        <div class="teilnehmer-item">
-            <div class="teilnehmer-info">
-                <span class="teilnehmer-name">
-                    <?php echo SecurityManager::escape_html($anmeldung->vorname . ' ' . $anmeldung->name); ?>
+        <div class="teilnehmer-item" id="teilnehmer-item-<?php echo $anmeldung->id; ?>">
+            <div class="teilnehmer-main">
+                <div class="teilnehmer-info">
+                    <span class="teilnehmer-name">
+                        <?php echo SecurityManager::escape_html($anmeldung->vorname . ' ' . $anmeldung->name); ?>
+                    </span>
+                </div>
+                <div class="teilnehmer-actions">
+                    <button 
+                        type="button"
+                        class="show-disziplinen-button" 
+                        data-anmeldung-id="<?php echo $anmeldung->id; ?>" 
+                        title="Disziplinen anzeigen"
+                        aria-label="Disziplinen für <?php echo SecurityManager::escape_attr($anmeldung->vorname . ' ' . $anmeldung->name); ?> anzeigen"
+                        tabindex="0"
+                    >📋</button>
                     
-                </span>
+                    <?php if (!$anmeldeschluss_passed): ?>
+                        <button 
+                            type="button"
+                            class="edit-anmeldung" 
+                            data-anmeldung-id="<?php echo $anmeldung->id; ?>" 
+                            title="Anmeldung bearbeiten"
+                            aria-label="Anmeldung von <?php echo SecurityManager::escape_attr($anmeldung->vorname . ' ' . $anmeldung->name); ?> bearbeiten"
+                            tabindex="0"
+                        >✏️</button>
+                    <?php else: ?>
+                        <button 
+                            type="button"
+                            class="view-anmeldung" 
+                            data-anmeldung-id="<?php echo $anmeldung->id; ?>" 
+                            title="Anmeldung einsehen"
+                            aria-label="Anmeldung von <?php echo SecurityManager::escape_attr($anmeldung->vorname . ' ' . $anmeldung->name); ?> einsehen"
+                            tabindex="0"
+                        >🔍</button>
+                    <?php endif; ?>
+                </div>
             </div>
-            <div class="teilnehmer-actions">
-                <button 
-                    type="button"
-                    class="show-disziplinen-button" 
-                    data-anmeldung-id="<?php echo $anmeldung->id; ?>" 
-                    title="Disziplinen anzeigen"
-                    aria-label="Disziplinen für <?php echo SecurityManager::escape_attr($anmeldung->vorname . ' ' . $anmeldung->name); ?> anzeigen"
-                    tabindex="0"
-                >📋</button>
-                
-                <?php if (!$anmeldeschluss_passed): ?>
-                    <button 
-                        type="button"
-                        class="edit-anmeldung" 
-                        data-anmeldung-id="<?php echo $anmeldung->id; ?>" 
-                        title="Anmeldung bearbeiten"
-                        aria-label="Anmeldung von <?php echo SecurityManager::escape_attr($anmeldung->vorname . ' ' . $anmeldung->name); ?> bearbeiten"
-                        tabindex="0"
-                    >✏️</button>
-                <?php else: ?>
-                    <button 
-                        type="button"
-                        class="view-anmeldung" 
-                        data-anmeldung-id="<?php echo $anmeldung->id; ?>" 
-                        title="Anmeldung einsehen"
-                        aria-label="Anmeldung von <?php echo SecurityManager::escape_attr($anmeldung->vorname . ' ' . $anmeldung->name); ?> einsehen"
-                        tabindex="0"
-                    >🔍</button>
-                <?php endif; ?>
+            
+            <div 
+                class="teilnehmer-disziplinen" 
+                id="disziplinen-<?php echo $anmeldung->id; ?>"
+                role="region"
+                aria-label="Disziplinen für <?php echo SecurityManager::escape_attr($anmeldung->vorname . ' ' . $anmeldung->name); ?>"
+            >
+                <small>
+                    <strong>Disziplinen:</strong> 
+                    <?php echo $this->get_participant_disciplines($anmeldung->id); ?>
+                </small>
             </div>
-        </div>
-        
-        <div 
-            class="teilnehmer-disziplinen" 
-            id="disziplinen-<?php echo $anmeldung->id; ?>" 
-            style="display: none;"
-            role="region"
-            aria-label="Disziplinen für <?php echo SecurityManager::escape_attr($anmeldung->vorname . ' ' . $anmeldung->name); ?>"
-        >
-            <small style="color: #6b7280; font-weight: 500;">
-                <strong>Disziplinen:</strong> 
-                <?php echo $this->get_participant_disciplines($anmeldung->id); ?>
-            </small>
         </div>
         <?php
         return ob_get_clean();

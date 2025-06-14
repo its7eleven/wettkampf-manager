@@ -1,8 +1,6 @@
 jQuery(document).ready(function($) {
     'use strict';
     
-    console.log('Wettkampf Frontend JavaScript wird geladen...');
-    
     // Modal elements
     const anmeldungModal = $('#anmeldung-modal');
     const mutationModal = $('#mutation-modal');
@@ -48,12 +46,12 @@ jQuery(document).ready(function($) {
     updateModalPositioning();
     $(window).on('resize', updateModalPositioning);
     
-    // KORRIGIERTE Kategorie-Berechnung Funktion - nur U10, U12, U14, U16, U18
+    // Kategorie-Berechnung Funktion - nur U10, U12, U14, U16, U18
     function calculateAgeCategory(jahrgang) {
         const currentYear = new Date().getFullYear();
         const age = currentYear - jahrgang;
         
-        // Nur diese 5 Kategorien verwenden, immer naechst passende waehlen
+        // Nur diese 5 Kategorien verwenden, immer nächst passende wählen
         if (age < 10) return 'U10';  // Alle unter 10 Jahren → U10
         if (age < 12) return 'U12';  // 10-11 Jahre → U12
         if (age < 14) return 'U14';  // 12-13 Jahre → U14
@@ -79,12 +77,12 @@ jQuery(document).ready(function($) {
         return category;
     }
     
-    // KORRIGIERTER Details Toggle - Wettkampf Details Accordion
+    // Details Toggle - Wettkampf Details Accordion
     function initDetailsToggle() {
         // Entferne alle bestehenden Event Handler um Konflikte zu vermeiden
         $(document).off('click', '.details-toggle');
         
-        // Fuege neuen Event Handler hinzu
+        // Füge neuen Event Handler hinzu
         $(document).on('click', '.details-toggle', function(e) {
             e.preventDefault();
             e.stopPropagation();
@@ -95,92 +93,58 @@ jQuery(document).ready(function($) {
             const toggleText = button.find('.toggle-text');
             const toggleIcon = button.find('.toggle-icon');
             
-            console.log('Details Toggle geklickt fuer Wettkampf:', wettkampfId);
-            console.log('Details div gefunden:', detailsDiv.length);
-            console.log('Button element:', button);
-            
             if (!detailsDiv.length) {
-                console.error('Details div nicht gefunden fuer ID: details-' + wettkampfId);
                 return;
             }
             
-            // Pruefe aktuellen Status
+            // Prüfe aktuellen Status
             const isVisible = detailsDiv.hasClass('show') || detailsDiv.is(':visible');
             
             if (isVisible) {
-                // Details schliessen
+                // Details schließen
                 detailsDiv.removeClass('show').slideUp(300);
                 if (toggleText.length) toggleText.text('Details anzeigen');
                 if (toggleIcon.length) toggleIcon.text('▼');
                 button.removeClass('active');
-                console.log('Details geschlossen fuer Wettkampf:', wettkampfId);
             } else {
-                // Details oeffnen
+                // Details öffnen
                 detailsDiv.addClass('show').slideDown(300);
                 if (toggleText.length) toggleText.text('Details ausblenden');
                 if (toggleIcon.length) toggleIcon.text('▲');
                 button.addClass('active');
-                console.log('Details geoeffnet fuer Wettkampf:', wettkampfId);
             }
         });
-        
-        console.log('Details Toggle Event Handler registriert fuer', $('.details-toggle').length, 'Buttons');
     }
     
     // Details Toggle sofort initialisieren
     initDetailsToggle();
     
-    // KOMPLETT UEBERARBEITETER Disziplinen Toggle - FINALE VERSION
-    let disziplinenToggleInProgress = false;
-    
+    // VERBESSERTE Disziplinen Toggle - Innerhalb des Elements
     function toggleDisziplinen(anmeldungId, button) {
-        // Verhindere mehrfache gleichzeitige Ausfuehrung
-        if (disziplinenToggleInProgress) {
-            console.log('Toggle already in progress, skipping');
-            return false;
-        }
-        
-        disziplinenToggleInProgress = true;
-        
+        const teilnehmerItem = $('#teilnehmer-item-' + anmeldungId);
         const disziplinenDiv = $('#disziplinen-' + anmeldungId);
         
-        console.log('Toggling disziplinen for anmeldung:', anmeldungId);
-        console.log('Disziplinen div found:', disziplinenDiv.length);
-        console.log('Current visibility:', disziplinenDiv.is(':visible'));
-        
-        if (disziplinenDiv.length === 0) {
-            console.warn('Disziplinen div not found for anmeldung:', anmeldungId);
-            disziplinenToggleInProgress = false;
+        if (teilnehmerItem.length === 0 || disziplinenDiv.length === 0) {
             return false;
         }
         
-        // Erst alle anderen schliessen (ausser der aktuellen)
-        $('.teilnehmer-disziplinen:visible').each(function() {
-            if ($(this).attr('id') !== 'disziplinen-' + anmeldungId) {
-                $(this).slideUp(150);
-            }
-        });
+        // Erst alle anderen schließen
+        $('.teilnehmer-item').not(teilnehmerItem).removeClass('expanded');
         $('.show-disziplinen-button').not(button).removeClass('active').attr('title', 'Disziplinen anzeigen');
         
         // Dann diese ein/ausklappen
-        if (disziplinenDiv.is(':visible')) {
-            disziplinenDiv.slideUp(150, function() {
-                disziplinenToggleInProgress = false;
-            });
+        if (teilnehmerItem.hasClass('expanded')) {
+            teilnehmerItem.removeClass('expanded');
             button.removeClass('active').attr('title', 'Disziplinen anzeigen');
-            console.log('Hiding disziplinen for:', anmeldungId);
         } else {
-            disziplinenDiv.slideDown(150, function() {
-                disziplinenToggleInProgress = false;
-            });
+            teilnehmerItem.addClass('expanded');
             button.addClass('active').attr('title', 'Disziplinen ausblenden');
-            console.log('Showing disziplinen for:', anmeldungId);
         }
         
         return false;
     }
     
-    // EINZELNER Event-Handler fuer Disziplinen Toggle
+    // Event-Handler für Disziplinen Toggle
     $(document).off('click', '.show-disziplinen-button');
     $(document).on('click', '.show-disziplinen-button', function(e) {
         e.preventDefault();
@@ -190,37 +154,23 @@ jQuery(document).ready(function($) {
         const anmeldungId = $(this).data('anmeldung-id');
         const button = $(this);
         
-        console.log('Disziplinen button clicked for anmeldung:', anmeldungId);
-        
         return toggleDisziplinen(anmeldungId, button);
     });
     
-    // VERHINDERE Event-Bubbling auf dem Parent-Element
+    // Verhindere Event-Bubbling auf dem Parent-Element
     $(document).on('click', '.teilnehmer-item', function(e) {
-        // Wenn der Klick auf dem Disziplinen-Button war, verhindere weitere Verarbeitung
-        if ($(e.target).hasClass('show-disziplinen-button') || 
-            $(e.target).closest('.show-disziplinen-button').length > 0) {
+        // Wenn der Klick auf einem Button war, verhindere weitere Verarbeitung
+        if ($(e.target).is('button') || $(e.target).closest('button').length > 0) {
             e.stopPropagation();
             e.preventDefault();
             return false;
         }
     });
     
-    // VERHINDERE Event-Bubbling auf Actions Container
-    $(document).on('click', '.teilnehmer-actions', function(e) {
-        // Stoppe Bubbling fuer alle Button-Clicks in Actions
-        if ($(e.target).is('button') || $(e.target).closest('button').length > 0) {
-            e.stopPropagation();
-        }
-    });
-    
-    // KORRIGIERTE Funktion zum Laden von Disziplinen mit Kategorie-Filter
+    // Funktion zum Laden von Disziplinen mit Kategorie-Filter
     function loadWettkampfDisziplinenWithCategory(wettkampfId, jahrgang, containerId, groupId, selectedDisziplinen = []) {
-        console.log('Loading disciplines with category filter:', {wettkampfId, jahrgang, containerId, groupId});
-        
         // Validierung der Parameter
         if (!wettkampfId || wettkampfId <= 0) {
-            console.error('Invalid wettkampf_id:', wettkampfId);
             return;
         }
         
@@ -228,13 +178,7 @@ jQuery(document).ready(function($) {
         const container = $('#' + containerId);
         const group = $('#' + groupId);
         
-        if (container.length === 0) {
-            console.error('Container not found:', containerId);
-            return;
-        }
-        
-        if (group.length === 0) {
-            console.error('Group not found:', groupId);
+        if (container.length === 0 || group.length === 0) {
             return;
         }
         
@@ -244,7 +188,7 @@ jQuery(document).ready(function($) {
             data: {
                 action: 'get_wettkampf_disziplinen',
                 wettkampf_id: parseInt(wettkampfId),
-                jahrgang: jahrgang && jahrgang > 1900 ? parseInt(jahrgang) : null, // KORRIGIERT: Nur gueltigen Jahrgang senden
+                jahrgang: jahrgang && jahrgang > 1900 ? parseInt(jahrgang) : null,
                 nonce: wettkampf_ajax.nonce
             },
             dataType: 'json',
@@ -254,8 +198,6 @@ jQuery(document).ready(function($) {
                 group.show();
             },
             success: function(response) {
-                console.log('Disciplines AJAX response:', response);
-                
                 if (response.success && response.data && response.data.length > 0) {
                     // Clear container
                     container.empty();
@@ -264,10 +206,8 @@ jQuery(document).ready(function($) {
                     let html = '';
                     if (response.user_category) {
                         html += '<div style="margin-bottom: 15px; padding: 12px; background: #e0f2fe; border: 1px solid #0891b2; border-radius: 6px; font-size: 14px;">';
-                        html += '<strong>📋 Verfuegbare Disziplinen fuer Kategorie ' + escapeHtml(response.user_category) + ':</strong>';
+                        html += '<strong>📋 Verfügbare Disziplinen für Kategorie ' + escapeHtml(response.user_category) + ':</strong>';
                         html += '</div>';
-                        
-                        console.log('User category:', response.user_category, 'Disciplines count:', response.data.length);
                     }
                     
                     // Create discipline checkboxes
@@ -279,7 +219,7 @@ jQuery(document).ready(function($) {
                         html += '<input type="checkbox" name="disziplinen[]" value="' + disziplin.id + '" ' + (isChecked ? 'checked' : '') + ' style="margin-right: 12px; transform: scale(1.1);">';
                         html += '<span style="font-weight: 500; color: #111827;">' + escapeHtml(disziplin.name) + '</span>';
                         
-                        // Kategorie-Badge hinzufuegen
+                        // Kategorie-Badge hinzufügen
                         if (disziplin.kategorie && disziplin.kategorie !== '') {
                             html += ' <span style="display: inline-block; margin-left: 8px; padding: 2px 6px; background: #e5e7eb; color: #374151; border-radius: 10px; font-size: 10px; font-weight: 600;">' + escapeHtml(disziplin.kategorie) + '</span>';
                         }
@@ -291,12 +231,12 @@ jQuery(document).ready(function($) {
                     });
                     
                     html += '</div>';
-                    html += '<small style="color: #6b7280; font-style: italic; margin-top: 8px; display: block;">Waehle die Disziplinen aus, fuer die du dich anmelden moechtest. Mindestens eine Disziplin muss ausgewaehlt werden.</small>';
+                    html += '<small style="color: #6b7280; font-style: italic; margin-top: 8px; display: block;">Wähle die Disziplinen aus, für die du dich anmelden möchtest. Mindestens eine Disziplin muss ausgewählt werden.</small>';
                     
                     container.html(html);
                     group.show();
                     
-                    // Hover-Effekte fuer Labels hinzufuegen
+                    // Hover-Effekte für Labels hinzufügen
                     container.find('label').hover(
                         function() { $(this).css('background-color', '#f0f9ff'); },
                         function() { $(this).css('background-color', 'transparent'); }
@@ -306,10 +246,9 @@ jQuery(document).ready(function($) {
                     // Keine passenden Disziplinen
                     let message = '<div style="text-align: center; padding: 20px; color: #6b7280; font-style: italic;">';
                     if (response.user_category) {
-                        message += '⚠️ Fuer deine Alterskategorie ' + escapeHtml(response.user_category) + ' sind bei diesem Wettkampf keine Disziplinen verfuegbar.';
-                        console.log('No disciplines found for category:', response.user_category);
+                        message += '⚠️ Für deine Alterskategorie ' + escapeHtml(response.user_category) + ' sind bei diesem Wettkampf keine Disziplinen verfügbar.';
                     } else {
-                        message += 'Fuer diesen Wettkampf sind keine spezifischen Disziplinen definiert.';
+                        message += 'Für diesen Wettkampf sind keine spezifischen Disziplinen definiert.';
                     }
                     message += '</div>';
                     
@@ -318,7 +257,6 @@ jQuery(document).ready(function($) {
                 }
             },
             error: function(xhr, status, error) {
-                console.error('Error loading disciplines:', error, xhr.responseText);
                 const container = $('#' + containerId);
                 container.html('<div style="text-align: center; padding: 20px; color: #dc2626;">❌ Fehler beim Laden der Disziplinen. Bitte versuche es erneut.</div>');
                 $('#' + groupId).show();
@@ -326,9 +264,9 @@ jQuery(document).ready(function($) {
         });
     }
     
-    // Angepasste urspruengliche loadWettkampfDisziplinen Funktion fuer Rueckwaertskompatibilitaet
+    // Angepasste ursprüngliche loadWettkampfDisziplinen Funktion für Rückwärtskompatibilität
     function loadWettkampfDisziplinen(wettkampfId, containerId, groupId, selectedDisziplinen = []) {
-        // Pruefen ob Jahrgang verfuegbar ist
+        // Prüfen ob Jahrgang verfügbar ist
         const jahrgang = $('#jahrgang').val() || $('#edit_jahrgang').val();
         
         if (jahrgang && jahrgang.length === 4) {
@@ -340,45 +278,37 @@ jQuery(document).ready(function($) {
         }
     }
     
-    // KORRIGIERTE Event Handler fuer Jahrgang-Eingabe in Anmeldeformular
+    // Event Handler für Jahrgang-Eingabe in Anmeldeformular
     $(document).on('input change', '#jahrgang', function() {
         const jahrgang = parseInt($(this).val());
         const wettkampfId = $('#wettkampf_id').val();
         
-        console.log('Jahrgang changed:', jahrgang, 'Wettkampf ID:', wettkampfId);
-        
         // Kategorie-Anzeige aktualisieren
         const category = updateCategoryDisplay(jahrgang, 'kategorie-text', 'kategorie-anzeige');
         
-        // Disziplinen neu laden wenn Jahrgang vollstaendig und Wettkampf ausgewaehlt
+        // Disziplinen neu laden wenn Jahrgang vollständig und Wettkampf ausgewählt
         if (jahrgang && jahrgang.toString().length === 4 && jahrgang > 1900 && wettkampfId) {
-            console.log('Loading disciplines for year:', jahrgang, 'category:', category, 'wettkampf:', wettkampfId);
             loadWettkampfDisziplinenWithCategory(wettkampfId, jahrgang, 'disziplinen_container', 'disziplinen_group');
         } else {
-            // Disziplinen ausblenden wenn Jahrgang unvollstaendig
+            // Disziplinen ausblenden wenn Jahrgang unvollständig
             $('#disziplinen_group').hide();
-            console.log('Hiding disciplines - invalid jahrgang or missing wettkampf_id');
         }
     });
     
-    // Event Handler fuer Jahrgang-Eingabe in Edit-Formular
+    // Event Handler für Jahrgang-Eingabe in Edit-Formular
     $(document).on('input change', '#edit_jahrgang', function() {
         const jahrgang = parseInt($(this).val());
         const wettkampfId = $('#edit_anmeldung_id').length ? 
             $('#edit_anmeldung_id').data('wettkampf-id') : null;
         
-        console.log('Edit jahrgang changed:', jahrgang, 'Wettkampf ID:', wettkampfId);
-        
         // Kategorie-Anzeige aktualisieren
         updateCategoryDisplay(jahrgang, 'edit-kategorie-text', 'edit-kategorie-anzeige');
         
-        // Disziplinen neu laden wenn moeglich
+        // Disziplinen neu laden wenn möglich
         if (jahrgang && jahrgang.toString().length === 4 && jahrgang > 1900 && wettkampfId) {
-            console.log('Loading edit disciplines for year:', jahrgang, 'wettkampf:', wettkampfId);
             loadWettkampfDisziplinenWithCategory(wettkampfId, jahrgang, 'edit_disziplinen_container', 'edit_disziplinen_group');
         } else {
             $('#edit_disziplinen_group').hide();
-            console.log('Hiding edit disciplines');
         }
     });
     
@@ -391,16 +321,14 @@ jQuery(document).ready(function($) {
         resetForm(anmeldungForm);
         
         // Disziplinen NICHT sofort laden - warten auf Jahrgang
-        console.log('Registration modal opened for wettkampf:', wettkampfId);
     });
     
-    // Open mutation modal - FIXED with event delegation
+    // Open mutation modal
     $(document).on('click', '.edit-anmeldung', function(e) {
         e.preventDefault();
         e.stopPropagation();
         
         const anmeldungId = $(this).data('anmeldung-id');
-        console.log('Edit button clicked for anmeldung:', anmeldungId);
         $('#mutation_anmeldung_id').val(anmeldungId);
         updateModalPositioning();
         mutationModal.show();
@@ -410,13 +338,12 @@ jQuery(document).ready(function($) {
         resetForm(mutationEditForm);
     });
     
-    // Open view-only modal - FIXED with event delegation
+    // Open view-only modal
     $(document).on('click', '.view-anmeldung', function(e) {
         e.preventDefault();
         e.stopPropagation();
         
         const anmeldungId = $(this).data('anmeldung-id');
-        console.log('View button clicked for anmeldung:', anmeldungId);
         $('#view_anmeldung_id').val(anmeldungId);
         updateModalPositioning();
         viewModal.show();
@@ -449,19 +376,17 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // ERWEITERTE Toggle functionality for transport options
+    // Toggle functionality for transport options
     $(document).on('change', 'input[name="eltern_fahren"]', function() {
         const value = $(this).val();
         const form = $(this).closest('form');
         
-        console.log('Transport option changed to:', value);
-        
         if (value === 'ja') {
-            // Ja - zeige freie Plaetze Feld
+            // Ja - zeige freie Plätze Feld
             form.find('#freie_plaetze_group, #edit_freie_plaetze_group').show();
             form.find('#freie_plaetze, #edit_freie_plaetze').attr('required', true);
         } else {
-            // Nein oder Direkt - verstecke freie Plaetze Feld
+            // Nein oder Direkt - verstecke freie Plätze Feld
             form.find('#freie_plaetze_group, #edit_freie_plaetze_group').hide();
             form.find('#freie_plaetze, #edit_freie_plaetze').attr('required', false).val('');
         }
@@ -480,7 +405,7 @@ jQuery(document).ready(function($) {
         if (disziplinenContainer.is(':visible') && disziplinenContainer.find('input[type="checkbox"]').length > 0) {
             const checkedDisziplinen = disziplinenContainer.find('input[type="checkbox"]:checked');
             if (checkedDisziplinen.length === 0) {
-                showMessage('error', 'Bitte waehle mindestens eine Disziplin aus.', anmeldungForm);
+                showMessage('error', 'Bitte wähle mindestens eine Disziplin aus.', anmeldungForm);
                 return;
             }
         }
@@ -497,11 +422,11 @@ jQuery(document).ready(function($) {
                 if (recaptchaResponse && recaptchaResponse.length > 0) {
                     formData.append('g-recaptcha-response', recaptchaResponse);
                 } else {
-                    showMessage('error', 'Bitte bestaetige das reCAPTCHA.', anmeldungForm);
+                    showMessage('error', 'Bitte bestätige das reCAPTCHA.', anmeldungForm);
                     return;
                 }
             } catch (error) {
-                console.log('reCAPTCHA error:', error);
+                // reCAPTCHA error silently handled
             }
         }
         
@@ -575,7 +500,7 @@ jQuery(document).ready(function($) {
                     const editForm = mutationEditForm;
                     editForm.find('input[name="eltern_fahren"][value="' + data.eltern_fahren + '"]').prop('checked', true);
                     
-                    // ERWEITERTE Logik fuer Transport-Optionen
+                    // Logik für Transport-Optionen
                     if (data.eltern_fahren === 'ja') {
                         editForm.find('#edit_freie_plaetze_group').show();
                         editForm.find('#edit_freie_plaetze').val(data.freie_plaetze).attr('required', true);
@@ -596,7 +521,6 @@ jQuery(document).ready(function($) {
                 }
             },
             error: function(xhr, status, error) {
-                console.error('AJAX Error:', { status, error, responseText: xhr.responseText });
                 showMessage('error', 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.', mutationVerifyForm);
             },
             complete: function() {
@@ -649,11 +573,11 @@ jQuery(document).ready(function($) {
                     const data = response.data;
                     const category = calculateAgeCategory(parseInt(data.jahrgang));
                     
-                    // ERWEITERTE Transport-Anzeige
+                    // Transport-Anzeige
                     let transportText = '';
                     switch(data.eltern_fahren) {
                         case 'ja':
-                            transportText = 'Ja, koennen andere mitnehmen';
+                            transportText = 'Ja, können andere mitnehmen';
                             break;
                         case 'nein':
                             transportText = 'Nein, brauchen Mitfahrgelegenheit';
@@ -685,7 +609,6 @@ jQuery(document).ready(function($) {
                 }
             },
             error: function(xhr, status, error) {
-                console.error('AJAX Error:', { status, error, responseText: xhr.responseText });
                 showMessage('error', 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.', viewVerifyForm);
             },
             complete: function() {
@@ -708,7 +631,7 @@ jQuery(document).ready(function($) {
         if (editDisziplinenContainer.is(':visible') && editDisziplinenContainer.find('input[type="checkbox"]').length > 0) {
             const checkedDisziplinen = editDisziplinenContainer.find('input[type="checkbox"]:checked');
             if (checkedDisziplinen.length === 0) {
-                showMessage('error', 'Bitte waehle mindestens eine Disziplin aus.', mutationEditForm);
+                showMessage('error', 'Bitte wähle mindestens eine Disziplin aus.', mutationEditForm);
                 return;
             }
         }
@@ -732,7 +655,7 @@ jQuery(document).ready(function($) {
     
     // Handle deletion
     $('.delete-button').on('click', function() {
-        if (!confirm('Moechtest du deine Anmeldung wirklich loeschen?')) {
+        if (!confirm('Möchtest du deine Anmeldung wirklich löschen?')) {
             return;
         }
         
@@ -745,7 +668,7 @@ jQuery(document).ready(function($) {
         
         submitForm(formData, mutationEditForm, function(response) {
             if (response.success) {
-                showMessage('success', '✅ Anmeldung erfolgreich geloescht! Die Seite wird in 3 Sekunden aktualisiert...', mutationEditForm);
+                showMessage('success', '✅ Anmeldung erfolgreich gelöscht! Die Seite wird in 3 Sekunden aktualisiert...', mutationEditForm);
                 setTimeout(function() {
                     location.reload();
                 }, 3000);
@@ -820,17 +743,17 @@ jQuery(document).ready(function($) {
             }
         });
         
-        // Spezielle Validierung fuer Disziplinen - nur wenn Disziplinen-Container sichtbar ist
+        // Spezielle Validierung für Disziplinen - nur wenn Disziplinen-Container sichtbar ist
         const formPrefix = formId === 'mutation-edit-form' ? 'edit_' : '';
         const disziplinenContainer = $('#' + formPrefix + 'disziplinen_container');
         if (disziplinenContainer.is(':visible') && disziplinenContainer.find('input[type="checkbox"]').length > 0) {
             const checkedDisziplinen = disziplinenContainer.find('input[type="checkbox"]:checked');
             if (checkedDisziplinen.length === 0) {
                 isValid = false;
-                // Visuelles Feedback fuer Disziplinen-Fehler
+                // Visuelles Feedback für Disziplinen-Fehler
                 disziplinenContainer.css('border-color', '#dc2626');
                 if (!isMutationForm) {
-                    showMessage('error', 'Bitte waehle mindestens eine Disziplin aus.', form);
+                    showMessage('error', 'Bitte wähle mindestens eine Disziplin aus.', form);
                 }
             } else {
                 disziplinenContainer.css('border-color', '#d1d5db');
@@ -838,9 +761,9 @@ jQuery(document).ready(function($) {
         }
         
         if (!isValid && !isMutationForm) {
-            showMessage('error', 'Bitte fulle alle Pflichtfelder korrekt aus.', form);
+            showMessage('error', 'Bitte fülle alle Pflichtfelder korrekt aus.', form);
         } else if (!isValid && isMutationForm) {
-            showMessage('error', 'Bitte fulle alle Felder korrekt aus.', form);
+            showMessage('error', 'Bitte fülle alle Felder korrekt aus.', form);
         }
         
         return isValid;
@@ -871,7 +794,6 @@ jQuery(document).ready(function($) {
                 callback(response);
             },
             error: function(xhr, status, error) {
-                console.error('AJAX Error:', error);
                 showMessage('error', 'Ein unerwarteter Fehler ist aufgetreten. Bitte versuche es erneut.', form);
             },
             complete: function() {
@@ -925,7 +847,7 @@ jQuery(document).ready(function($) {
                     grecaptcha.reset();
                 }, 100);
             } catch (error) {
-                console.log('reCAPTCHA reset error:', error);
+                // reCAPTCHA reset error silently handled
             }
         }
     }
@@ -1012,7 +934,7 @@ jQuery(document).ready(function($) {
     
     $(window).on('beforeunload', function() {
         if (formChanged && (anmeldungModal.is(':visible') || mutationModal.is(':visible') || viewModal.is(':visible'))) {
-            return 'Du hast ungespeicherte Aenderungen. Moechtest du die Seite wirklich verlassen?';
+            return 'Du hast ungespeicherte Änderungen. Möchtest du die Seite wirklich verlassen?';
         }
     });
     
@@ -1073,6 +995,4 @@ jQuery(document).ready(function($) {
         // Re-attach event handlers for any dynamically loaded content
         initDetailsToggle();
     });
-    
-    console.log('Wettkampf Frontend JavaScript mit korrigiertem Details Toggle und vollstaendiger Funktionalitaet erfolgreich geladen');
 });
