@@ -1,6 +1,6 @@
 <?php
 /**
- * Frontend AJAX functionality - ERWEITERT mit "wir fahren direkt" Option
+ * Frontend AJAX functionality - KORRIGIERT mit JSON-Error-Handling
  */
 
 // Prevent direct access
@@ -25,23 +25,53 @@ class FrontendAjax {
     }
     
     /**
+     * Send JSON response and exit
+     */
+    private function send_json_response($data) {
+        wp_send_json($data);
+        exit;
+    }
+    
+    /**
+     * Send JSON error and exit
+     */
+    private function send_json_error($message, $data = null) {
+        $response = array('success' => false, 'message' => $message);
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+        $this->send_json_response($response);
+    }
+    
+    /**
+     * Send JSON success and exit
+     */
+    private function send_json_success($message, $data = null) {
+        $response = array('success' => true, 'message' => $message);
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+        $this->send_json_response($response);
+    }
+    
+    /**
      * Process registration
      */
     public function process_anmeldung() {
         // Verify nonce
         if (!SecurityManager::verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Sicherheitsfehler')));
+            $this->send_json_error('Sicherheitsfehler');
         }
         
         // Check rate limiting
         if (!SecurityManager::check_rate_limit('anmeldung', 5, 600)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Zu viele Anmeldeversuche. Bitte warte 10 Minuten.')));
+            $this->send_json_error('Zu viele Anmeldeversuche. Bitte warte 10 Minuten.');
         }
         
         // Verify reCAPTCHA
         $recaptcha_response = isset($_POST['g-recaptcha-response']) ? $_POST['g-recaptcha-response'] : '';
         if (!SecurityManager::verify_recaptcha($recaptcha_response)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'reCAPTCHA Verifikation fehlgeschlagen')));
+            $this->send_json_error('reCAPTCHA Verifikation fehlgeschlagen');
         }
         
         // Sanitize and validate data
@@ -61,7 +91,7 @@ class FrontendAjax {
         
         // Check for duplicates
         if (SecurityManager::check_duplicate_registration($data['wettkampf_id'], $data['email'], $data['vorname'], $data['jahrgang'])) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Eine Person mit dieser E-Mail, diesem Vornamen und Jahrgang ist bereits angemeldet!')));
+            $this->send_json_error('Eine Person mit dieser E-Mail, diesem Vornamen und Jahrgang ist bereits angemeldet!');
         }
         
         // Validation rules
@@ -80,7 +110,7 @@ class FrontendAjax {
         $validation = SecurityManager::validate_form_data($data, $validation_rules);
         
         if (!$validation['valid']) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Validierungsfehler: ' . implode(', ', $validation['errors']))));
+            $this->send_json_error('Validierungsfehler: ' . implode(', ', $validation['errors']));
         }
         
         // Save registration
@@ -94,9 +124,9 @@ class FrontendAjax {
             // Reset rate limit on success
             SecurityManager::reset_rate_limit('anmeldung');
             
-            wp_die(json_encode(array('success' => true, 'message' => 'Anmeldung erfolgreich!')));
+            $this->send_json_success('Anmeldung erfolgreich!');
         } else {
-            wp_die(json_encode(array('success' => false, 'message' => 'Fehler bei der Anmeldung')));
+            $this->send_json_error('Fehler bei der Anmeldung');
         }
     }
     
@@ -105,7 +135,7 @@ class FrontendAjax {
      */
     public function process_mutation() {
         if (!SecurityManager::verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Sicherheitsfehler')));
+            $this->send_json_error('Sicherheitsfehler');
         }
         
         $anmeldung_id = intval($_POST['anmeldung_id']);
@@ -126,14 +156,14 @@ class FrontendAjax {
     private function verify_registration_ownership($anmeldung_id) {
         // Rate limiting
         if (!SecurityManager::check_rate_limit('mutation_verify', 5, 600)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Zu viele Versuche. Bitte warten Sie 10 Minuten.')));
+            $this->send_json_error('Zu viele Versuche. Bitte warten Sie 10 Minuten.');
         }
         
         $verify_email = sanitize_email($_POST['verify_email']);
         $verify_jahrgang = intval($_POST['verify_jahrgang']);
         
         if (!SecurityManager::verify_registration_ownership($anmeldung_id, $verify_email, $verify_jahrgang)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'E-Mail oder Jahrgang stimmen nicht ueberein')));
+            $this->send_json_error('E-Mail oder Jahrgang stimmen nicht ueberein');
         }
         
         // Success - load full registration data with disciplines
@@ -153,7 +183,7 @@ class FrontendAjax {
         // Reset rate limit on success
         SecurityManager::reset_rate_limit('mutation_verify');
         
-        wp_die(json_encode(array('success' => true, 'data' => $anmeldung)));
+        $this->send_json_success('Verifikation erfolgreich', $anmeldung);
     }
     
     /**
@@ -163,9 +193,9 @@ class FrontendAjax {
         $result = WettkampfDatabase::delete_registration($anmeldung_id);
         
         if ($result) {
-            wp_die(json_encode(array('success' => true, 'message' => 'Anmeldung erfolgreich geloescht')));
+            $this->send_json_success('Anmeldung erfolgreich geloescht');
         } else {
-            wp_die(json_encode(array('success' => false, 'message' => 'Fehler beim Loeschen')));
+            $this->send_json_error('Fehler beim Loeschen');
         }
     }
     
@@ -202,15 +232,15 @@ class FrontendAjax {
         $validation = SecurityManager::validate_form_data($data, $validation_rules);
         
         if (!$validation['valid']) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Validierungsfehler: ' . implode(', ', $validation['errors']))));
+            $this->send_json_error('Validierungsfehler: ' . implode(', ', $validation['errors']));
         }
         
         $result = WettkampfDatabase::save_registration($data, $anmeldung_id);
         
         if ($result !== false) {
-            wp_die(json_encode(array('success' => true, 'message' => 'Anmeldung erfolgreich aktualisiert')));
+            $this->send_json_success('Anmeldung erfolgreich aktualisiert');
         } else {
-            wp_die(json_encode(array('success' => false, 'message' => 'Fehler beim Aktualisieren')));
+            $this->send_json_error('Fehler beim Aktualisieren');
         }
     }
     
@@ -219,21 +249,21 @@ class FrontendAjax {
      */
     public function process_view_only() {
         if (!SecurityManager::verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Sicherheitsfehler')));
+            $this->send_json_error('Sicherheitsfehler');
         }
         
         $anmeldung_id = intval($_POST['anmeldung_id']);
         
         // Rate limiting
         if (!SecurityManager::check_rate_limit('view_only', 5, 600)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'Zu viele Versuche. Bitte warten Sie 10 Minuten.')));
+            $this->send_json_error('Zu viele Versuche. Bitte warten Sie 10 Minuten.');
         }
         
         $verify_email = sanitize_email($_POST['verify_email']);
         $verify_jahrgang = intval($_POST['verify_jahrgang']);
         
         if (!SecurityManager::verify_registration_ownership($anmeldung_id, $verify_email, $verify_jahrgang)) {
-            wp_die(json_encode(array('success' => false, 'message' => 'E-Mail oder Jahrgang stimmen nicht ueberein')));
+            $this->send_json_error('E-Mail oder Jahrgang stimmen nicht ueberein');
         }
         
         // Success - load registration data
@@ -259,70 +289,55 @@ class FrontendAjax {
         // Reset rate limit on success
         SecurityManager::reset_rate_limit('view_only');
         
-        wp_die(json_encode(array('success' => true, 'data' => $anmeldung)));
+        $this->send_json_success('Daten geladen', $anmeldung);
     }
     
     /**
      * Get competition disciplines with category filter
      */
     public function get_wettkampf_disziplinen() {
-        // Debug-Start
-        error_log('WETTKAMPF AJAX: get_wettkampf_disziplinen called');
-        error_log('WETTKAMPF AJAX: POST data: ' . print_r($_POST, true));
-        
-        // Basis-Sicherheitspruefung - VEREINFACHT
-        if (!isset($_POST['nonce'])) {
-            error_log('WETTKAMPF AJAX: No nonce provided');
-            wp_die(json_encode(array('success' => false, 'message' => 'Nonce fehlt')));
-        }
-        
-        if (!wp_verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
-            error_log('WETTKAMPF AJAX: Invalid nonce');
-            wp_die(json_encode(array('success' => false, 'message' => 'Ungueltige Nonce')));
-        }
-        
-        // Parameter extrahieren
-        $wettkampf_id = isset($_POST['wettkampf_id']) ? intval($_POST['wettkampf_id']) : 0;
-        $jahrgang = isset($_POST['jahrgang']) ? intval($_POST['jahrgang']) : 0;
-        
-        error_log("WETTKAMPF AJAX: wettkampf_id=$wettkampf_id, jahrgang=$jahrgang");
-        
-        if ($wettkampf_id <= 0) {
-            error_log('WETTKAMPF AJAX: Invalid wettkampf_id');
-            wp_die(json_encode(array('success' => false, 'message' => 'Ungueltige Wettkampf-ID')));
-        }
-        
-        // Kategorie berechnen
-        $user_category = null;
-        if ($jahrgang > 1900) {
-            // Pruefe ob CategoryCalculator existiert
-            if (class_exists('CategoryCalculator')) {
-                $user_category = CategoryCalculator::calculate($jahrgang);
-                error_log("WETTKAMPF AJAX: Calculated category: $user_category");
-            } else {
-                error_log('WETTKAMPF AJAX: CategoryCalculator class not found');
-                // Fallback Kategorie-Berechnung
-                $current_year = date('Y');
-                $age = $current_year - $jahrgang;
-                if ($age < 10) $user_category = 'U10';
-                elseif ($age < 12) $user_category = 'U12';
-                elseif ($age < 14) $user_category = 'U14';
-                elseif ($age < 16) $user_category = 'U16';
-                else $user_category = 'U18';
-                error_log("WETTKAMPF AJAX: Fallback category: $user_category");
-            }
-        }
-        
         try {
-            // Disziplinen laden - mit Fallback
+            // Disable error output for AJAX
+            error_reporting(0);
+            @ini_set('display_errors', 0);
+            
+            // Verify nonce
+            if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wettkampf_ajax')) {
+                $this->send_json_error('Sicherheitsfehler: Ungueltige Nonce');
+            }
+            
+            // Get parameters
+            $wettkampf_id = isset($_POST['wettkampf_id']) ? intval($_POST['wettkampf_id']) : 0;
+            $jahrgang = isset($_POST['jahrgang']) ? intval($_POST['jahrgang']) : 0;
+            
+            if ($wettkampf_id <= 0) {
+                $this->send_json_error('Ungueltige Wettkampf-ID');
+            }
+            
+            // Calculate category
+            $user_category = null;
+            if ($jahrgang > 1900) {
+                if (class_exists('CategoryCalculator')) {
+                    $user_category = CategoryCalculator::calculate($jahrgang);
+                } else {
+                    // Fallback category calculation
+                    $current_year = date('Y');
+                    $age = $current_year - $jahrgang;
+                    if ($age < 10) $user_category = 'U10';
+                    elseif ($age < 12) $user_category = 'U12';
+                    elseif ($age < 14) $user_category = 'U14';
+                    elseif ($age < 16) $user_category = 'U16';
+                    else $user_category = 'U18';
+                }
+            }
+            
+            // Load disciplines
             $disciplines = array();
             
             if (class_exists('WettkampfDatabase')) {
                 $disciplines = WettkampfDatabase::get_competition_disciplines($wettkampf_id, $user_category);
-                error_log('WETTKAMPF AJAX: Found ' . count($disciplines) . ' disciplines via WettkampfDatabase');
             } else {
-                // Fallback: Direkte Datenbankabfrage
-                error_log('WETTKAMPF AJAX: WettkampfDatabase not found, using fallback');
+                // Fallback: Direct database query
                 global $wpdb;
                 
                 $query = "
@@ -342,10 +357,9 @@ class FrontendAjax {
                 $query .= " ORDER BY d.sortierung ASC, d.name ASC";
                 
                 $disciplines = $wpdb->get_results($wpdb->prepare($query, $params));
-                error_log('WETTKAMPF AJAX: Found ' . count($disciplines) . ' disciplines via fallback query');
             }
             
-            // Daten fuer JSON vorbereiten
+            // Prepare data for JSON
             $disciplines_array = array();
             if (is_array($disciplines)) {
                 foreach ($disciplines as $discipline) {
@@ -365,31 +379,13 @@ class FrontendAjax {
                 'data' => $disciplines_array,
                 'user_category' => $user_category,
                 'wettkampf_id' => $wettkampf_id,
-                'jahrgang' => $jahrgang,
-                'debug_info' => array(
-                    'found_disciplines' => count($disciplines_array),
-                    'calculated_category' => $user_category,
-                    'query_params' => array(
-                        'wettkampf_id' => $wettkampf_id,
-                        'jahrgang' => $jahrgang
-                    )
-                )
+                'jahrgang' => $jahrgang
             );
             
-            error_log('WETTKAMPF AJAX: Sending success response with ' . count($disciplines_array) . ' disciplines');
-            wp_die(json_encode($response));
+            $this->send_json_response($response);
             
         } catch (Exception $e) {
-            error_log('WETTKAMPF AJAX: Exception caught: ' . $e->getMessage());
-            wp_die(json_encode(array(
-                'success' => false, 
-                'message' => 'Datenbankfehler: ' . $e->getMessage(),
-                'debug_info' => array(
-                    'exception' => $e->getMessage(),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine()
-                )
-            )));
+            $this->send_json_error('Datenbankfehler: ' . $e->getMessage());
         }
     }
 }
