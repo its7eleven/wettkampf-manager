@@ -1,6 +1,6 @@
 <?php
 /**
- * Export functionality admin class
+ * Export functionality admin class - E-Mail-Versand korrigiert
  */
 
 // Prevent direct access
@@ -89,7 +89,7 @@ class AdminExport {
             'Wettkampf',
             'Wettkampf Datum',
             'Wettkampf Ort',
-            'Eltern fahren',
+            'Transport',
             'Freie Plätze',
             'Disziplinen',
             'Anmeldedatum'
@@ -112,6 +112,9 @@ class AdminExport {
             
             $user_category = CategoryCalculator::calculate($anmeldung->jahrgang);
             
+            // Transport-Text generieren
+            $transport_text = $this->get_transport_text($anmeldung->eltern_fahren, $anmeldung->freie_plaetze);
+            
             $row = array(
                 $anmeldung->vorname,
                 $anmeldung->name,
@@ -122,8 +125,8 @@ class AdminExport {
                 $anmeldung->wettkampf_name,
                 WettkampfHelpers::format_german_date($anmeldung->wettkampf_datum),
                 $anmeldung->wettkampf_ort,
-                $anmeldung->eltern_fahren ? 'Ja' : 'Nein',
-                $anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '',
+                $transport_text,
+                ($anmeldung->eltern_fahren === 'ja') ? $anmeldung->freie_plaetze : '',
                 !empty($discipline_names) ? implode(', ', $discipline_names) : '',
                 WettkampfHelpers::format_german_date($anmeldung->anmeldedatum, true)
             );
@@ -133,6 +136,27 @@ class AdminExport {
         
         fclose($output);
         exit;
+    }
+    
+    /**
+     * Get transport text for export
+     */
+    private function get_transport_text($eltern_fahren, $freie_plaetze) {
+        switch ($eltern_fahren) {
+            case 'ja':
+                return "Ja (" . $freie_plaetze . " Plätze)";
+            case 'nein':
+                return "Nein";
+            case 'direkt':
+                return "Fahren direkt";
+            default:
+                // Fallback für alte Einträge
+                if ($eltern_fahren == 1) {
+                    return "Ja (" . $freie_plaetze . " Plätze)";
+                } else {
+                    return "Nein";
+                }
+        }
     }
     
     /**
@@ -186,7 +210,7 @@ class AdminExport {
         echo '<Table>' . "\n";
         
         // Column widths
-        $column_widths = array(80, 80, 120, 70, 60, 70, 150, 80, 100, 80, 70, 200, 120);
+        $column_widths = array(80, 80, 120, 70, 60, 70, 150, 80, 100, 120, 70, 200, 120);
         foreach ($column_widths as $width) {
             echo '<Column ss:Width="' . $width . '"/>' . "\n";
         }
@@ -195,7 +219,7 @@ class AdminExport {
         echo '<Row>' . "\n";
         $headers = array(
             'Vorname', 'Name', 'E-Mail', 'Geschlecht', 'Jahrgang', 'Kategorie',
-            'Wettkampf', 'Wettkampf Datum', 'Wettkampf Ort', 'Eltern fahren',
+            'Wettkampf', 'Wettkampf Datum', 'Wettkampf Ort', 'Transport',
             'Freie Plätze', 'Disziplinen', 'Anmeldedatum'
         );
         
@@ -218,6 +242,7 @@ class AdminExport {
             }
             
             $user_category = CategoryCalculator::calculate($anmeldung->jahrgang);
+            $transport_text = $this->get_transport_text($anmeldung->eltern_fahren, $anmeldung->freie_plaetze);
             
             echo '<Row>' . "\n";
             
@@ -231,8 +256,8 @@ class AdminExport {
                 $anmeldung->wettkampf_name,
                 WettkampfHelpers::format_german_date($anmeldung->wettkampf_datum),
                 $anmeldung->wettkampf_ort,
-                $anmeldung->eltern_fahren ? 'Ja' : 'Nein',
-                $anmeldung->eltern_fahren ? $anmeldung->freie_plaetze : '',
+                $transport_text,
+                ($anmeldung->eltern_fahren === 'ja') ? $anmeldung->freie_plaetze : '',
                 !empty($discipline_names) ? implode(', ', $discipline_names) : '',
                 WettkampfHelpers::format_german_date($anmeldung->anmeldedatum, true)
             );
@@ -259,12 +284,29 @@ class AdminExport {
         if (isset($_POST['test_export']) && wp_verify_nonce($_POST['test_nonce'], 'test_export')) {
             $wettkampf_id = intval($_POST['wettkampf_id']);
             
-            $wettkampf = WettkampfDatabase::get_competition($wettkampf_id);
+            // Lade komplette Wettkampf-Daten mit Anmeldungen
+            global $wpdb;
+            $tables = WettkampfDatabase::get_table_names();
+            
+            $wettkampf = $wpdb->get_row($wpdb->prepare("
+                SELECT w.*, COUNT(a.id) as anmeldungen_count 
+                FROM {$tables['wettkampf']} w 
+                LEFT JOIN {$tables['anmeldung']} a ON w.id = a.wettkampf_id 
+                WHERE w.id = %d
+                GROUP BY w.id
+            ", $wettkampf_id));
             
             if ($wettkampf) {
                 $cron = new WettkampfCron();
-                $cron->send_automatic_export($wettkampf);
-                WettkampfHelpers::add_admin_notice('Test-Export für "' . $wettkampf->name . '" wurde versendet!');
+                $result = $cron->send_automatic_export($wettkampf);
+                
+                if ($result) {
+                    WettkampfHelpers::add_admin_notice('Test-Export für "' . $wettkampf->name . '" wurde versendet!');
+                } else {
+                    WettkampfHelpers::add_admin_notice('Fehler beim Versenden des Test-Exports. Bitte überprüfe die E-Mail-Einstellungen.', 'error');
+                }
+            } else {
+                WettkampfHelpers::add_admin_notice('Wettkampf nicht gefunden.', 'error');
             }
         }
         

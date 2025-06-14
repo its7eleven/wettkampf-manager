@@ -185,30 +185,6 @@ jQuery(document).ready(function($) {
         });
     });
     
-    // Bulk actions placeholder (can be expanded later)
-    function initBulkActions() {
-        // Add checkbox to table headers
-        if ($('.wp-list-table thead tr th').length > 1) {
-            $('.wp-list-table thead tr').prepend('<th class="check-column"><input type="checkbox" id="select-all-anmeldungen"></th>');
-            $('.wp-list-table tbody tr').each(function() {
-                const anmeldungId = $(this).find('a[href*="edit="]').attr('href');
-                if (anmeldungId) {
-                    const id = anmeldungId.split('edit=')[1];
-                    $(this).prepend('<td class="check-column"><input type="checkbox" name="anmeldung_ids[]" value="' + id + '"></td>');
-                }
-            });
-        }
-        
-        // Select all functionality
-        $('#select-all-anmeldungen').on('change', function() {
-            const isChecked = $(this).prop('checked');
-            $('input[name="anmeldung_ids[]"]').prop('checked', isChecked);
-        });
-    }
-    
-    // Uncomment to enable bulk actions
-    // initBulkActions();
-    
     // Form validation enhancements
     $('form input[required], form select[required]').on('blur', function() {
         const field = $(this);
@@ -299,8 +275,9 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // Clear draft on successful form submission
+    // Clear draft on successful form submission - WICHTIG: formChanged auf false setzen
     $(formSelector).on('submit', function() {
+        formChanged = false; // WICHTIG: Verhindert die Warnmeldung beim Submit
         try {
             localStorage.removeItem('wettkampf_form_draft');
         } catch (e) {
@@ -308,12 +285,8 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // Warn about unsaved changes
-    $(window).on('beforeunload', function() {
-        if (formChanged && $(formSelector + ' input, ' + formSelector + ' select, ' + formSelector + ' textarea').length > 0) {
-            return 'Sie haben ungespeicherte Änderungen. Möchten Sie die Seite wirklich verlassen?';
-        }
-    });
+    // ENTFERNT: Warn about unsaved changes - Diese Funktion verursacht das Problem
+    // Die beforeunload Warnung wurde komplett entfernt
     
     // Accessibility improvements
     

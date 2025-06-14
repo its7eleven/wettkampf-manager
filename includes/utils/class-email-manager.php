@@ -1,6 +1,6 @@
 <?php
 /**
- * Email management utility - ERWEITERT mit "wir fahren direkt" Option
+ * Email management utility - Mit korrekten Umlauten
  */
 
 // Prevent direct access
@@ -40,7 +40,7 @@ class EmailManager {
     }
     
     /**
-     * Build confirmation email message - ERWEITERT mit Transport-Optionen
+     * Build confirmation email message
      */
     private function build_confirmation_message($anmeldung, $disciplines) {
         $message = "Hallo " . $anmeldung->vorname . ",\n\n";
@@ -59,7 +59,7 @@ class EmailManager {
         $message .= "Jahrgang: " . $anmeldung->jahrgang . "\n";
         $message .= "Kategorie: " . CategoryCalculator::calculate($anmeldung->jahrgang) . "\n";
         
-        // ERWEITERTE Transport-Information
+        // Transport-Information
         $transport_text = $this->get_transport_text($anmeldung->eltern_fahren, $anmeldung->freie_plaetze);
         $message .= "Transport: " . $transport_text . "\n";
         
@@ -94,7 +94,7 @@ class EmailManager {
     }
     
     /**
-     * NEUE Funktion: Transport-Text generieren
+     * Transport-Text generieren
      */
     private function get_transport_text($eltern_fahren, $freie_plaetze) {
         switch ($eltern_fahren) {
@@ -176,7 +176,7 @@ class EmailManager {
     }
     
     /**
-     * Generate CSV export content - ERWEITERT mit Transport-Optionen
+     * Generate CSV export content
      */
     private function generate_csv_export($wettkampf_id) {
         global $wpdb;
@@ -204,7 +204,7 @@ class EmailManager {
         // Output UTF-8 BOM for proper encoding
         echo "\xEF\xBB\xBF";
         
-        // CSV headers - ERWEITERT
+        // CSV headers
         $headers = array(
             'Vorname', 'Name', 'E-Mail', 'Geschlecht', 'Jahrgang', 'Kategorie',
             'Wettkampf', 'Wettkampf Datum', 'Wettkampf Ort', 'Transport',
@@ -229,7 +229,7 @@ class EmailManager {
             
             $user_category = CategoryCalculator::calculate($anmeldung->jahrgang);
             
-            // ERWEITERTE Transport-Information für CSV
+            // Transport-Information für CSV
             $transport_text = $this->get_transport_text($anmeldung->eltern_fahren, $anmeldung->freie_plaetze);
             
             $row = array(

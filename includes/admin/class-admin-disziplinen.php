@@ -1,6 +1,6 @@
 <?php
 /**
- * Discipline management admin class
+ * Discipline management admin class - Mit korrekten Umlauten
  */
 
 // Prevent direct access

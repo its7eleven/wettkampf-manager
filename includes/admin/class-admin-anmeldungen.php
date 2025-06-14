@@ -1,6 +1,6 @@
 <?php
 /**
- * Registration management admin class - KORRIGIERT mit funktionierender Bearbeitung
+ * Registration management admin class - Mit korrekten Umlauten
  */
 
 // Prevent direct access
@@ -23,7 +23,7 @@ class AdminAnmeldungen {
         if (isset($_GET['delete']) && wp_verify_nonce($_GET['_wpnonce'], 'delete_anmeldung')) {
             $id = intval($_GET['delete']);
             $this->delete_anmeldung($id);
-            WettkampfHelpers::add_admin_notice('Anmeldung geloescht!');
+            WettkampfHelpers::add_admin_notice('Anmeldung gelöscht!');
         }
         
         // Check if we're in edit mode
@@ -78,7 +78,7 @@ class AdminAnmeldungen {
                             <input type="hidden" name="page" value="wettkampf-anmeldungen">
                             
                             <select name="wettkampf_id" onchange="this.form.submit()">
-                                <option value="">Alle Wettkaempfe</option>
+                                <option value="">Alle Wettkämpfe</option>
                                 <?php foreach ($wettkaempfe as $wettkampf): ?>
                                     <option value="<?php echo $wettkampf->id; ?>" <?php selected($filters['wettkampf_id'], $wettkampf->id); ?>>
                                         <?php echo SecurityManager::escape_html($wettkampf->name . ' (' . WettkampfHelpers::format_german_date($wettkampf->datum) . ')'); ?>
@@ -89,7 +89,7 @@ class AdminAnmeldungen {
                             <input type="text" name="search" value="<?php echo SecurityManager::escape_attr($filters['search']); ?>" placeholder="Name oder E-Mail suchen..." style="min-width: 200px;">
                             <button type="submit" class="button">Filtern</button>
                             <?php if (!empty($filters['search']) || !empty($filters['wettkampf_id'])): ?>
-                                <a href="?page=wettkampf-anmeldungen" class="button">Zuruecksetzen</a>
+                                <a href="?page=wettkampf-anmeldungen" class="button">Zurücksetzen</a>
                             <?php endif; ?>
                         </form>
                     </div>
@@ -97,7 +97,7 @@ class AdminAnmeldungen {
                     <div class="export-buttons">
                         <a href="?page=wettkampf-anmeldungen&export=xlsx&wettkampf_id=<?php echo $filters['wettkampf_id']; ?>&search=<?php echo urlencode($filters['search']); ?>&_wpnonce=<?php echo wp_create_nonce('export_anmeldungen'); ?>" 
                            class="export-button xlsx" 
-                           title="Excel/CSV Export - automatisch optimiert fuer dein Geraet">
+                           title="Excel/CSV Export - automatisch optimiert für dein Gerät">
                             📋 Export
                             <small style="display: block; font-size: 10px; opacity: 0.8; margin-top: 2px;">
                                 Desktop: Excel | Mobile: CSV
@@ -109,8 +109,8 @@ class AdminAnmeldungen {
                 <div style="margin-top: 15px; padding: 12px; background: #f0f6fc; border-radius: 5px; border-left: 4px solid #3b82f6;">
                     <p style="margin: 0; font-size: 13px; color: #374151;">
                         <strong>📱 Export-Info:</strong> 
-                        Auf Desktop-Geraeten wird eine Excel-Datei (.xls) erstellt, auf mobilen Geraeten eine CSV-Datei fuer bessere Kompatibilitaet. 
-                        CSV-Dateien koennen in Excel mit "Daten → Text in Spalten" und Semikolon als Trennzeichen optimal formatiert werden.
+                        Auf Desktop-Geräten wird eine Excel-Datei (.xls) erstellt, auf mobilen Geräten eine CSV-Datei für bessere Kompatibilität. 
+                        CSV-Dateien können in Excel mit "Daten → Text in Spalten" und Semikolon als Trennzeichen optimal formatiert werden.
                     </p>
                 </div>
             </div>
@@ -130,7 +130,7 @@ class AdminAnmeldungen {
                         <th style="width: 200px;">Wettkampf</th>
                         <th style="width: 100px;">Datum</th>
                         <th style="width: 120px;">Transport</th>
-                        <th style="width: 80px;">Plaetze</th>
+                        <th style="width: 80px;">Plätze</th>
                         <th style="width: 150px;">Disziplinen</th>
                         <th style="width: 120px;">Anmeldedatum</th>
                         <th style="width: 100px;">Aktionen</th>
@@ -200,7 +200,7 @@ class AdminAnmeldungen {
                                 <td>
                                     <a href="?page=wettkampf-anmeldungen&edit=<?php echo $anmeldung->id; ?>" title="Bearbeiten">Bearbeiten</a> |
                                     <a href="?page=wettkampf-anmeldungen&delete=<?php echo $anmeldung->id; ?>&_wpnonce=<?php echo wp_create_nonce('delete_anmeldung'); ?>" 
-                                       onclick="return confirm('Anmeldung wirklich loeschen?')" title="Loeschen">Loeschen</a>
+                                       onclick="return confirm('Anmeldung wirklich löschen?')" title="Löschen">Löschen</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -212,11 +212,11 @@ class AdminAnmeldungen {
                 <h4>💡 Hinweise zur Anmeldungsverwaltung mit Kategorien:</h4>
                 <ul>
                     <li><strong>Kategorien:</strong> Werden automatisch basierend auf dem Jahrgang berechnet (Alter im aktuellen Jahr)</li>
-                    <li><strong>Transport:</strong> Drei Optionen - Ja (mit Plaetzen), Nein (braucht Mitfahrgelegenheit), Direkt (fahren selbst)</li>
+                    <li><strong>Transport:</strong> Drei Optionen - Ja (mit Plätzen), Nein (braucht Mitfahrgelegenheit), Direkt (fahren selbst)</li>
                     <li><strong>Disziplinen:</strong> Beim Bearbeiten werden nur Disziplinen der entsprechenden Kategorie angezeigt</li>
-                    <li><strong>Filter:</strong> Verwende die Dropdown-Filter um spezifische Wettkaempfe oder Suchbegriffe zu finden</li>
-                    <li><strong>Export:</strong> Exportiert alle gefilterten Anmeldungen als Excel/CSV-Datei (automatisch optimiert fuer dein Geraet)</li>
-                    <li><strong>Loeschen:</strong> Beim Loeschen werden auch alle Disziplin-Zuordnungen entfernt</li>
+                    <li><strong>Filter:</strong> Verwende die Dropdown-Filter um spezifische Wettkämpfe oder Suchbegriffe zu finden</li>
+                    <li><strong>Export:</strong> Exportiert alle gefilterten Anmeldungen als Excel/CSV-Datei (automatisch optimiert für dein Gerät)</li>
+                    <li><strong>Löschen:</strong> Beim Löschen werden auch alle Disziplin-Zuordnungen entfernt</li>
                 </ul>
             </div>
         </div>
@@ -224,14 +224,14 @@ class AdminAnmeldungen {
     }
     
     /**
-     * Funktion fuer Transport-Anzeige
+     * Funktion für Transport-Anzeige
      */
     private function get_transport_display($eltern_fahren) {
         switch ($eltern_fahren) {
             case 'ja':
                 return array(
                     'badge' => WettkampfHelpers::get_status_badge('active', '✓ Ja'),
-                    'text' => 'Ja, koennen andere mitnehmen'
+                    'text' => 'Ja, können andere mitnehmen'
                 );
             case 'nein':
                 return array(
@@ -244,7 +244,7 @@ class AdminAnmeldungen {
                     'text' => 'Fahren direkt zum Wettkampf'
                 );
             default:
-                // Fallback fuer alte Eintraege (1/0)
+                // Fallback für alte Einträge (1/0)
                 if ($eltern_fahren == 1 || $eltern_fahren == '1') {
                     return array(
                         'badge' => WettkampfHelpers::get_status_badge('active', '✓ Ja'),
@@ -306,7 +306,7 @@ class AdminAnmeldungen {
                     ?>
                     
                     <tr id="freie_plaetze_row" style="<?php echo ($edit_anmeldung->eltern_fahren === 'ja') ? '' : 'display: none;'; ?>">
-                        <th><label for="freie_plaetze">Freie Plaetze</label></th>
+                        <th><label for="freie_plaetze">Freie Plätze</label></th>
                         <td><input type="number" id="freie_plaetze" name="freie_plaetze" value="<?php echo SecurityManager::escape_attr($edit_anmeldung->freie_plaetze); ?>" min="0" max="10"></td>
                     </tr>
                     
@@ -364,7 +364,7 @@ class AdminAnmeldungen {
      */
     private function render_gender_select($selected) {
         $options = array(
-            'maennlich' => 'Maennlich',
+            'maennlich' => 'Männlich',
             'weiblich' => 'Weiblich'
         );
         
@@ -376,7 +376,7 @@ class AdminAnmeldungen {
     }
     
     /**
-     * Funktion fuer Transport-Optionen
+     * Funktion für Transport-Optionen
      */
     private function render_transport_options($anmeldung) {
         // Convert old values
@@ -388,7 +388,7 @@ class AdminAnmeldungen {
         }
         
         $html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-        $html .= '<label><input type="radio" name="eltern_fahren" value="ja" ' . checked($current_value, 'ja', false) . ' onchange="toggleFreePlaetze(this)"> Ja, koennen andere Kinder mitnehmen</label>';
+        $html .= '<label><input type="radio" name="eltern_fahren" value="ja" ' . checked($current_value, 'ja', false) . ' onchange="toggleFreePlaetze(this)"> Ja, können andere Kinder mitnehmen</label>';
         $html .= '<label><input type="radio" name="eltern_fahren" value="nein" ' . checked($current_value, 'nein', false) . ' onchange="toggleFreePlaetze(this)"> Nein, brauchen eine Mitfahrgelegenheit</label>';
         $html .= '<label><input type="radio" name="eltern_fahren" value="direkt" ' . checked($current_value, 'direkt', false) . ' onchange="toggleFreePlaetze(this)"> Wir fahren direkt zum Wettkampf</label>';
         $html .= '</div>';
@@ -414,11 +414,11 @@ class AdminAnmeldungen {
         $selected_ids = array_map(function($d) { return $d->disziplin_id; }, $selected_disciplines);
         
         if (empty($wettkampf_disciplines)) {
-            return '<p><em>Keine Disziplinen fuer Kategorie ' . $user_category . ' bei diesem Wettkampf definiert.</em></p>';
+            return '<p><em>Keine Disziplinen für Kategorie ' . $user_category . ' bei diesem Wettkampf definiert.</em></p>';
         }
         
         $html = '<div style="background: #f0f6fc; padding: 10px; border-radius: 5px; margin-bottom: 10px;">';
-        $html .= '<small><strong>Verfuegbare Disziplinen fuer Kategorie ' . $user_category . ':</strong></small>';
+        $html .= '<small><strong>Verfügbare Disziplinen für Kategorie ' . $user_category . ':</strong></small>';
         $html .= '</div>';
         $html .= '<div style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #f9f9f9;">';
         
@@ -491,7 +491,7 @@ class AdminAnmeldungen {
             'geschlecht' => array('required' => true),
             'jahrgang' => array('required' => true, 'year' => true),
             'eltern_fahren' => array('required' => true, 'custom' => function($value) {
-                return in_array($value, ['ja', 'nein', 'direkt']) ? true : 'Ungueltige Transport-Option';
+                return in_array($value, ['ja', 'nein', 'direkt']) ? true : 'Ungültige Transport-Option';
             })
         );
         
