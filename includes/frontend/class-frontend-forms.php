@@ -53,8 +53,8 @@ class FrontendForms {
                     <div class="form-group">
                         <label for="geschlecht">Geschlecht *</label>
                         <select id="geschlecht" name="geschlecht" required>
-                            <option value="">Bitte waehlen</option>
-                            <option value="maennlich">Maennlich</option>
+                            <option value="">Bitte wählen</option>
+                            <option value="maennlich">Männlich</option>
                             <option value="weiblich">Weiblich</option>
                         </select>
                     </div>
@@ -75,25 +75,25 @@ class FrontendForms {
                     </div>
                     
                     <div class="form-group">
-                        <label>Koennen deine Eltern fahren? *</label>
+                        <label>Können deine Eltern fahren? *</label>
                         <div class="radio-group">
                             <label class="radio-label">
                                 <input type="radio" name="eltern_fahren" value="ja" required>
-                                <span>Ja, koennen andere Kinder mitnehmen</span>
+                                <span>Ja</span>
                             </label>
                             <label class="radio-label">
                                 <input type="radio" name="eltern_fahren" value="nein" required>
-                                <span>Nein, brauchen eine Mitfahrgelegenheit</span>
+                                <span>Nein</span>
                             </label>
                             <label class="radio-label">
                                 <input type="radio" name="eltern_fahren" value="direkt" required>
-                                <span>Wir fahren direkt zum Wettkampf</span>
+                                <span>Wir fahren direkt</span>
                             </label>
                         </div>
                     </div>
                     
                     <div class="form-group" id="freie_plaetze_group" style="display: none;">
-                        <label for="freie_plaetze">Anzahl Plaetze fuer Kinder (inkl. eigene)</label>
+                        <label for="freie_plaetze">Anzahl Plätze für Kinder (inkl. eigene)</label>
                         <input type="number" id="freie_plaetze" name="freie_plaetze" min="0" max="10" placeholder="z.B. 2">
                     </div>
                     
@@ -166,7 +166,7 @@ class FrontendForms {
                     <div class="form-group">
                         <label for="edit_geschlecht">Geschlecht *</label>
                         <select id="edit_geschlecht" name="geschlecht" required>
-                            <option value="maennlich">Maennlich</option>
+                            <option value="maennlich">Männlich</option>
                             <option value="weiblich">Weiblich</option>
                         </select>
                     </div>
@@ -181,29 +181,29 @@ class FrontendForms {
                     </div>
                     
                     <div class="form-group">
-                        <label>Koennen deine Eltern fahren? *</label>
+                        <label>Können deine Eltern fahren? *</label>
                         <div class="radio-group">
                             <label class="radio-label">
                                 <input type="radio" name="eltern_fahren" value="ja" required>
-                                <span>Ja, koennen andere Kinder mitnehmen</span>
+                                <span>Ja</span>
                             </label>
                             <label class="radio-label">
                                 <input type="radio" name="eltern_fahren" value="nein" required>
-                                <span>Nein, brauchen eine Mitfahrgelegenheit</span>
+                                <span>Nein</span>
                             </label>
                             <label class="radio-label">
                                 <input type="radio" name="eltern_fahren" value="direkt" required>
-                                <span>Wir fahren direkt zum Wettkampf</span>
+                                <span>Wir fahren direkt</span>
                             </label>
                         </div>
                     </div>
                     
                     <div class="form-group" id="edit_freie_plaetze_group" style="display: none;">
-                        <label for="edit_freie_plaetze">Anzahl freie Plaetze</label>
+                        <label for="edit_freie_plaetze">Anzahl freie Plätze</label>
                         <input type="number" id="edit_freie_plaetze" name="freie_plaetze" min="0" max="10" placeholder="z.B. 2">
                     </div>
                     
-                    <!-- Disziplinen fuer Bearbeitung -->
+                    <!-- Disziplinen für Bearbeitung -->
                     <div class="form-group" id="edit_disziplinen_group" style="display: none;">
                         <label>Disziplinen *</label>
                         <div id="edit_disziplinen_container"></div>
@@ -265,17 +265,17 @@ class FrontendForms {
                             <strong>Jahrgang:</strong> <span id="view_jahrgang"></span>
                             <strong>Kategorie:</strong> <span id="view_kategorie"></span>
                             <strong>Transport:</strong> <span id="view_eltern_fahren"></span>
-                            <strong>Freie Plaetze:</strong> <span id="view_freie_plaetze"></span>
+                            <strong>Freie Plätze:</strong> <span id="view_freie_plaetze"></span>
                             <strong>Disziplinen:</strong> <span id="view_disziplinen"></span>
                             <strong>Anmeldedatum:</strong> <span id="view_anmeldedatum"></span>
                         </div>
                         <p style="color: #666; font-style: italic; margin-top: 20px; padding: 10px; background: #f9f9f9; border-radius: 5px;">
-                            ℹ️ Die Anmeldefrist ist abgelaufen. Aenderungen sind nicht mehr moeglich.
+                            ℹ️ Die Anmeldefrist ist abgelaufen. Änderungen sind nicht mehr möglich.
                         </p>
                     </div>
                     
                     <div class="form-actions">
-                        <button type="button" class="cancel-button">Schliessen</button>
+                        <button type="button" class="cancel-button">Schließen</button>
                     </div>
                 </div>
             </div>

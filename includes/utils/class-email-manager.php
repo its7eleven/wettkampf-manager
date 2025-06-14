@@ -33,7 +33,7 @@ class EmailManager {
         $anmeldung_disziplinen = WettkampfDatabase::get_registration_disciplines($anmeldung_id);
         
         // Create email content
-        $subject = 'Anmeldebestaetigung: ' . $anmeldung->wettkampf_name;
+        $subject = 'Anmeldebestätigung: ' . $anmeldung->wettkampf_name;
         $message = $this->build_confirmation_message($anmeldung, $anmeldung_disziplinen);
         
         return $this->send_email($anmeldung->email, $subject, $message);
@@ -44,7 +44,7 @@ class EmailManager {
      */
     private function build_confirmation_message($anmeldung, $disciplines) {
         $message = "Hallo " . $anmeldung->vorname . ",\n\n";
-        $message .= "deine Anmeldung fuer den Wettkampf wurde erfolgreich registriert.\n\n";
+        $message .= "deine Anmeldung für den Wettkampf wurde erfolgreich registriert.\n\n";
         
         // Competition details
         $message .= "Wettkampf: " . $anmeldung->wettkampf_name . "\n";
@@ -99,15 +99,15 @@ class EmailManager {
     private function get_transport_text($eltern_fahren, $freie_plaetze) {
         switch ($eltern_fahren) {
             case 'ja':
-                return "Ja, koennen andere Kinder mitnehmen (" . $freie_plaetze . " Plaetze)";
+                return "Ja (" . $freie_plaetze . " Plätze)";
             case 'nein':
-                return "Nein, brauchen eine Mitfahrgelegenheit";
+                return "Nein";
             case 'direkt':
-                return "Fahren direkt zum Wettkampf";
+                return "Wir fahren direkt";
             default:
-                // Fallback fuer alte Eintraege
+                // Fallback für alte Einträge
                 if ($eltern_fahren == 1) {
-                    return "Ja (" . $freie_plaetze . " Plaetze)";
+                    return "Ja (" . $freie_plaetze . " Plätze)";
                 } else {
                     return "Nein";
                 }
@@ -134,7 +134,7 @@ class EmailManager {
         file_put_contents($temp_file, $csv_content);
         
         // Build email
-        $subject = 'Anmeldungen fuer ' . $wettkampf->name . ' (Anmeldeschluss abgelaufen)';
+        $subject = 'Anmeldungen für ' . $wettkampf->name . ' (Anmeldeschluss abgelaufen)';
         $message = $this->build_export_message($wettkampf);
         
         $result = $this->send_email($recipient_email, $subject, $message, array($temp_file));
@@ -158,7 +158,7 @@ class EmailManager {
      */
     private function build_export_message($wettkampf) {
         $message = "Hallo,\n\n";
-        $message .= "die Anmeldefrist fuer den Wettkampf '" . $wettkampf->name . "' ist abgelaufen.\n\n";
+        $message .= "die Anmeldefrist für den Wettkampf '" . $wettkampf->name . "' ist abgelaufen.\n\n";
         
         $message .= "Wettkampf-Details:\n";
         $message .= "- Name: " . $wettkampf->name . "\n";
@@ -168,8 +168,8 @@ class EmailManager {
         $message .= "- Anzahl Anmeldungen: " . $wettkampf->anmeldungen_count . "\n\n";
         
         $message .= "Im Anhang findest du die CSV-Datei mit allen Anmeldungen.\n";
-        $message .= "Diese kann in Excel, LibreOffice oder jedem anderen Tabellenkalkulationsprogramm geoeffnet werden.\n\n";
-        $message .= "Tipp: In Excel verwende 'Daten > Text in Spalten' mit Semikolon als Trennzeichen fuer beste Formatierung.\n\n";
+        $message .= "Diese kann in Excel, LibreOffice oder jedem anderen Tabellenkalkulationsprogramm geöffnet werden.\n\n";
+        $message .= "Tipp: In Excel verwende 'Daten > Text in Spalten' mit Semikolon als Trennzeichen für beste Formatierung.\n\n";
         $message .= "Diese E-Mail wurde automatisch vom Wettkampf Manager generiert.\n";
         
         return $message;
@@ -208,7 +208,7 @@ class EmailManager {
         $headers = array(
             'Vorname', 'Name', 'E-Mail', 'Geschlecht', 'Jahrgang', 'Kategorie',
             'Wettkampf', 'Wettkampf Datum', 'Wettkampf Ort', 'Transport',
-            'Freie Plaetze', 'Disziplinen', 'Anmeldedatum'
+            'Freie Plätze', 'Disziplinen', 'Anmeldedatum'
         );
         
         // Output headers
@@ -229,7 +229,7 @@ class EmailManager {
             
             $user_category = CategoryCalculator::calculate($anmeldung->jahrgang);
             
-            // ERWEITERTE Transport-Information fuer CSV
+            // ERWEITERTE Transport-Information für CSV
             $transport_text = $this->get_transport_text($anmeldung->eltern_fahren, $anmeldung->freie_plaetze);
             
             $row = array(
@@ -275,7 +275,7 @@ class EmailManager {
     public function test_email_configuration() {
         $test_email = get_option('admin_email');
         $subject = 'Wettkampf Manager - Test E-Mail';
-        $message = "Hallo,\n\ndies ist eine Test-E-Mail vom Wettkampf Manager.\n\nWenn du diese E-Mail erhalten hast, funktioniert die E-Mail-Konfiguration korrekt.\n\nViele Gruesse\nWettkampf Manager";
+        $message = "Hallo,\n\ndies ist eine Test-E-Mail vom Wettkampf Manager.\n\nWenn du diese E-Mail erhalten hast, funktioniert die E-Mail-Konfiguration korrekt.\n\nViele Grüße\nWettkampf Manager";
         
         return $this->send_email($test_email, $subject, $message);
     }
