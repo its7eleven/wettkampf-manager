@@ -1,6 +1,6 @@
 <?php
 /**
- * Database operations class - ERWEITERT mit "wir fahren direkt" Option
+ * Database operations class - ERWEITERT mit "wir fahren direkt" Option und besserer Fehlerbehandlung
  */
 
 // Prevent direct access
@@ -83,7 +83,7 @@ class WettkampfDatabase {
         
         // Bessere Kategorie-Filterung
         if ($kategorie && $kategorie !== '') {
-            // Zeige Disziplinen fuer die spezifische Kategorie ODER fuer "Alle"
+            // Zeige Disziplinen für die spezifische Kategorie ODER für "Alle"
             $query .= " AND (d.kategorie = %s OR d.kategorie = 'Alle' OR d.kategorie IS NULL OR d.kategorie = '')";
             $params[] = $kategorie;
             
@@ -277,46 +277,72 @@ class WettkampfDatabase {
     }
     
     /**
-     * Save registration - ERWEITERT mit Transport-Optionen
+     * Save registration - ERWEITERT mit Transport-Optionen und besserer Fehlerbehandlung
      */
     public static function save_registration($data, $id = null) {
         global $wpdb;
         $tables = self::get_table_names();
         
-        // ERWEITERTE Logik fuer eltern_fahren und freie_plaetze
-        $eltern_fahren = sanitize_text_field($data['eltern_fahren']);
-        $freie_plaetze = 0;
-        
-        // Nur bei "ja" sollen freie Plaetze gespeichert werden
-        if ($eltern_fahren === 'ja') {
-            $freie_plaetze = intval($data['freie_plaetze']);
+        try {
+            // ERWEITERTE Logik für eltern_fahren und freie_plaetze
+            $eltern_fahren = sanitize_text_field($data['eltern_fahren']);
+            
+            // Validiere Transport-Option
+            if (!in_array($eltern_fahren, array('ja', 'nein', 'direkt'))) {
+                WettkampfHelpers::log_error('Invalid eltern_fahren value: ' . $eltern_fahren);
+                return false;
+            }
+            
+            $freie_plaetze = 0;
+            
+            // Nur bei "ja" sollen freie Plätze gespeichert werden
+            if ($eltern_fahren === 'ja') {
+                $freie_plaetze = intval($data['freie_plaetze']);
+            }
+            
+            $registration_data = array(
+                'wettkampf_id' => intval($data['wettkampf_id']),
+                'vorname' => sanitize_text_field($data['vorname']),
+                'name' => sanitize_text_field($data['name']),
+                'email' => sanitize_email($data['email']),
+                'geschlecht' => sanitize_text_field($data['geschlecht']),
+                'jahrgang' => intval($data['jahrgang']),
+                'eltern_fahren' => $eltern_fahren,
+                'freie_plaetze' => $freie_plaetze
+            );
+            
+            // Debug logging
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('WettkampfDatabase: Saving registration with data: ' . print_r($registration_data, true));
+            }
+            
+            if ($id) {
+                $result = $wpdb->update($tables['anmeldung'], $registration_data, array('id' => $id));
+                if ($result === false) {
+                    WettkampfHelpers::log_error('Database update failed: ' . $wpdb->last_error);
+                    return false;
+                }
+                $anmeldung_id = $id;
+            } else {
+                $result = $wpdb->insert($tables['anmeldung'], $registration_data);
+                if ($result === false) {
+                    WettkampfHelpers::log_error('Database insert failed: ' . $wpdb->last_error);
+                    return false;
+                }
+                $anmeldung_id = $wpdb->insert_id;
+            }
+            
+            // Update discipline assignments
+            if (isset($data['disziplinen'])) {
+                self::update_registration_disciplines($anmeldung_id, $data['disziplinen']);
+            }
+            
+            return $anmeldung_id;
+            
+        } catch (Exception $e) {
+            WettkampfHelpers::log_error('Exception in save_registration: ' . $e->getMessage());
+            return false;
         }
-        
-        $registration_data = array(
-            'wettkampf_id' => intval($data['wettkampf_id']),
-            'vorname' => sanitize_text_field($data['vorname']),
-            'name' => sanitize_text_field($data['name']),
-            'email' => sanitize_email($data['email']),
-            'geschlecht' => sanitize_text_field($data['geschlecht']),
-            'jahrgang' => intval($data['jahrgang']),
-            'eltern_fahren' => $eltern_fahren,
-            'freie_plaetze' => $freie_plaetze
-        );
-        
-        if ($id) {
-            $wpdb->update($tables['anmeldung'], $registration_data, array('id' => $id));
-            $anmeldung_id = $id;
-        } else {
-            $wpdb->insert($tables['anmeldung'], $registration_data);
-            $anmeldung_id = $wpdb->insert_id;
-        }
-        
-        // Update discipline assignments
-        if (isset($data['disziplinen'])) {
-            self::update_registration_disciplines($anmeldung_id, $data['disziplinen']);
-        }
-        
-        return $anmeldung_id;
     }
     
     /**
