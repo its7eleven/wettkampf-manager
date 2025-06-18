@@ -1,97 +1,6 @@
-    /**
-     * Save registration - KORRIGIERT mit Debug
-     */
-    private function save_anmeldung() {
-        // Debug: Log POST data
-        WettkampfHelpers::log_error('Admin save_anmeldung - POST data: ' . print_r($_POST, true));
-        
-        // Sicherheitsprüfung
-        if (!current_user_can('manage_options')) {
-            WettkampfHelpers::add_admin_notice('Keine Berechtigung!', 'error');
-            return;
-        }
-        
-        $anmeldung_id = isset($_POST['anmeldung_id']) ? intval($_POST['anmeldung_id']) : 0;
-        $wettkampf_id = isset($_POST['wettkampf_id']) ? intval($_POST['wettkampf_id']) : 0;
-        
-        if (!$anmeldung_id || !$wettkampf_id) {
-            WettkampfHelpers::add_admin_notice('Fehler: Anmeldung oder Wettkampf ID fehlt!', 'error');
-            WettkampfHelpers::log_error('Admin save_anmeldung - FEHLER: anmeldung_id=' . $anmeldung_id . ', wettkampf_id=' . $wettkampf_id);
-            return;
-        }
-        
-        // Sanitize data
-        $sanitization_rules = array(
-            'vorname' => 'text',
-            'name' => 'text',
-            'email' => 'email',
-            'geschlecht' => 'text',
-            'jahrgang' => 'int',
-            'eltern_fahren' => 'text',
-            'freie_plaetze' => 'int',
-            'disziplinen' => 'array'
-        );
-        
-        $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
-        
-        // Add wettkampf_id to data
-        $data['wettkampf_id'] = $wettkampf_id;
-        
-        // Debug: Log sanitized data
-        WettkampfHelpers::log_error('Admin save_anmeldung - Sanitized data: ' . print_r($data, true));
-        
-        // Validation
-        $validation_rules = array(
-            'vorname' => array('required' => true, 'min_length' => 2),
-            'name' => array('required' => true, 'min_length' => 2),
-            'email' => array('required' => true, 'email' => true),
-            'geschlecht' => array('required' => true),
-            'jahrgang' => array('required' => true, 'year' => true),
-            'eltern_fahren' => array('required' => true, 'custom' => function($value) {
-                return in_array($value, ['ja', 'nein', 'direkt']) ? true : 'Ungültige Transport-Option';
-            })
-        );
-        
-        $validation = SecurityManager::validate_form_data($data, $validation_rules);
-        
-        if (!$validation['valid']) {
-            WettkampfHelpers::add_admin_notice('Validierungsfehler: ' . implode(', ', $validation['errors']), 'error');
-            WettkampfHelpers::log_error('Admin save_anmeldung - Validation errors: ' . print_r($validation['errors'], true));
-            return;
-        }
-        
-        // Handle freie_plaetze
-        if ($data['eltern_fahren'] !== 'ja') {
-            $data['freie_plaetze'] = 0;
-        }
-        
-        // Debug-Log final data
-        WettkampfHelpers::log_error('Admin save_anmeldung - Final data before save: ' . print_r($data, true));
-        
-        $result = WettkampfDatabase::save_registration($data, $anmeldung_id);
-        
-        WettkampfHelpers::log_error('Admin save_anmeldung - Save result: ' . ($result !== false ? 'SUCCESS (ID: ' . $result . ')' : 'FAILED'));
-        
-        if ($result !== false) {
-            WettkampfHelpers::add_admin_notice('Anmeldung erfolgreich aktualisiert!');
-            
-            // Debug: Check if redirect works
-            WettkampfHelpers::log_error('Admin save_anmeldung - Redirecting to admin.php?page=wettkampf-anmeldungen');
-            
-            wp_redirect(admin_url('admin.php?page=wettkampf-anmeldungen'));
-            exit;
-        } else {
-            WettkampfHelpers::add_admin_notice('Fehler beim Aktualisieren der Anmeldung. Bitte prüfe das Debug-Log!', 'error');
-            
-            // Zusätzliche Datenbankfehler prüfen
-            global $wpdb;
-            if ($wpdb->last_error) {
-                WettkampfHelpers::log_error('Admin save_anmeldung - Database error: ' . $wpdb->last_error);
-            }
-        }
-    }'<?php
+<?php
 /**
- * Registration management admin class - KORRIGIERT für Backend-Bearbeitung
+ * Registration management admin class
  */
 
 // Prevent direct access
@@ -324,9 +233,6 @@ class AdminAnmeldungen {
      * Funktion für Transport-Anzeige
      */
     private function get_transport_display($eltern_fahren) {
-        // Debug log
-        WettkampfHelpers::log_error('get_transport_display - Input value: ' . var_export($eltern_fahren, true));
-        
         switch ($eltern_fahren) {
             case 'ja':
                 return array(
@@ -344,10 +250,7 @@ class AdminAnmeldungen {
                     'text' => 'Fahren direkt zum Wettkampf'
                 );
             default:
-                // Log unexpected value
-                WettkampfHelpers::log_error('get_transport_display - Unexpected value: ' . var_export($eltern_fahren, true));
-                
-                // Fallback für alte Einträge (sollte mit ENUM nicht mehr vorkommen)
+                // Fallback für alte Einträge
                 if ($eltern_fahren == 1 || $eltern_fahren == '1') {
                     return array(
                         'badge' => WettkampfHelpers::get_status_badge('active', '✓ Ja'),
@@ -363,7 +266,7 @@ class AdminAnmeldungen {
     }
     
     /**
-     * Render edit form - KORRIGIERT
+     * Render edit form
      */
     private function render_edit_form($edit_anmeldung) {
         ?>
@@ -434,63 +337,31 @@ class AdminAnmeldungen {
                     <a href="?page=wettkampf-anmeldungen" class="button">Abbrechen</a>
                 </p>
             </form>
-            
-            <!-- Debug Info -->
-            <?php if (defined('WP_DEBUG') && WP_DEBUG): ?>
-            <div style="margin-top: 20px; padding: 15px; background: #f0f0f0; border: 1px solid #ccc;">
-                <h3>Debug Info:</h3>
-                <p><strong>Aktuelle Werte aus der Datenbank:</strong></p>
-                <ul>
-                    <li>eltern_fahren (Raw): <?php echo var_export($edit_anmeldung->eltern_fahren, true); ?></li>
-                    <li>eltern_fahren (Type): <?php echo gettype($edit_anmeldung->eltern_fahren); ?></li>
-                    <li>freie_plaetze: <?php echo var_export($edit_anmeldung->freie_plaetze, true); ?></li>
-                </ul>
-                <?php
-                // Direkte DB-Abfrage zur Überprüfung
-                global $wpdb;
-                $table = $wpdb->prefix . 'wettkampf_anmeldung';
-                $db_check = $wpdb->get_row($wpdb->prepare("SELECT eltern_fahren FROM $table WHERE id = %d", $edit_anmeldung->id));
-                ?>
-                <p><strong>Direkte DB-Abfrage:</strong></p>
-                <ul>
-                    <li>eltern_fahren: <?php echo var_export($db_check->eltern_fahren, true); ?></li>
-                </ul>
-            </div>
-            <?php endif; ?>
         </div>
         
         <script type="text/javascript">
         jQuery(document).ready(function($) {
-            console.log('Admin Anmeldung Edit Script loaded');
-            
             function toggleFreePlaetze() {
                 var selectedValue = $('input[name="eltern_fahren"]:checked').val();
                 var row = $('#freie_plaetze_row');
                 var input = $('#freie_plaetze');
                 
-                console.log('Toggle called, selected value:', selectedValue);
-                
                 if (selectedValue === 'ja') {
                     row.show();
                     input.attr('required', 'required');
-                    console.log('Showing freie_plaetze row');
                 } else {
                     row.hide();
                     input.removeAttr('required');
                     if (selectedValue !== 'ja') {
                         input.val('0');
                     }
-                    console.log('Hiding freie_plaetze row');
                 }
             }
             
-            // Event handler für Radio-Buttons
             $(document).on('change', 'input[name="eltern_fahren"]', function() {
-                console.log('Radio changed to:', $(this).val());
                 toggleFreePlaetze();
             });
             
-            // Initial beim Laden
             setTimeout(function() {
                 toggleFreePlaetze();
             }, 100);
@@ -516,26 +387,21 @@ class AdminAnmeldungen {
     }
     
     /**
-     * Funktion für Transport-Optionen - KORRIGIERT
+     * Render transport options
      */
     private function render_transport_options($anmeldung) {
-        // Get current value - it's already the correct ENUM value from DB
         $current_value = $anmeldung->eltern_fahren;
         
-        // Debug log
-        WettkampfHelpers::log_error('render_transport_options - Current value from DB: ' . var_export($current_value, true));
-        
-        // Only convert if we still have old numeric values (shouldn't happen with ENUM)
+        // Convert old numeric values if they still exist
         if ($current_value === '1' || $current_value === 1) {
             $current_value = 'ja';
         } elseif ($current_value === '0' || $current_value === 0) {
             $current_value = 'nein';
         }
         
-        // Ensure we have a valid value - but DON'T override valid values!
+        // Ensure we have a valid value
         if (!in_array($current_value, array('ja', 'nein', 'direkt'))) {
-            WettkampfHelpers::log_error('render_transport_options - Invalid value, setting default: nein');
-            $current_value = 'nein'; // Default only if invalid
+            $current_value = 'nein';
         }
         
         $html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
@@ -543,9 +409,6 @@ class AdminAnmeldungen {
         $html .= '<label><input type="radio" name="eltern_fahren" value="nein" ' . checked($current_value, 'nein', false) . ' required> Nein, brauchen eine Mitfahrgelegenheit</label>';
         $html .= '<label><input type="radio" name="eltern_fahren" value="direkt" ' . checked($current_value, 'direkt', false) . ' required> Wir fahren direkt zum Wettkampf</label>';
         $html .= '</div>';
-        
-        // Debug info
-        $html .= '<!-- Debug: DB value = ' . htmlspecialchars($anmeldung->eltern_fahren) . ', Used value = ' . htmlspecialchars($current_value) . ' -->';
         
         return $html;
     }
@@ -612,7 +475,7 @@ class AdminAnmeldungen {
     }
     
     /**
-     * Save registration - KORRIGIERT
+     * Save registration
      */
     private function save_anmeldung() {
         SecurityManager::check_admin_permissions();
@@ -660,9 +523,6 @@ class AdminAnmeldungen {
         if ($data['eltern_fahren'] !== 'ja') {
             $data['freie_plaetze'] = 0;
         }
-        
-        // Debug-Log
-        WettkampfHelpers::log_error('Admin save_anmeldung - Data: ' . print_r($data, true));
         
         $result = WettkampfDatabase::save_registration($data, $anmeldung_id);
         

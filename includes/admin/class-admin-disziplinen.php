@@ -1,6 +1,6 @@
 <?php
 /**
- * Discipline management admin class - Mit korrekten Umlauten
+ * Discipline management admin class - KORRIGIERT für Speichern-Fehler
  */
 
 // Prevent direct access
@@ -158,8 +158,8 @@ class AdminDisziplinen {
      * Render category select dropdown
      */
     private function render_category_select($edit_disziplin) {
-        $categories = CategoryCalculator::get_categories_for_select(true);
-        $selected = $edit_disziplin ? $edit_disziplin->kategorie : '';
+        $categories = CategoryCalculator::get_categories_for_select(false); // Kein "Bitte wählen"
+        $selected = $edit_disziplin ? $edit_disziplin->kategorie : 'Alle';
         
         $html = '<select id="kategorie" name="kategorie" required>';
         $html .= WettkampfHelpers::array_to_options($categories, $selected);
@@ -187,57 +187,79 @@ class AdminDisziplinen {
     }
     
     /**
-     * Save discipline
+     * Save discipline - KORRIGIERT
      */
     private function save_disziplin() {
-        SecurityManager::check_admin_permissions();
+        // Sicherheitsprüfung
+        if (!current_user_can('manage_options')) {
+            WettkampfHelpers::add_admin_notice('Keine Berechtigung!', 'error');
+            return;
+        }
         
-        // Sanitize data
-        $sanitization_rules = array(
-            'name' => 'text',
-            'beschreibung' => 'textarea',
-            'kategorie' => 'text',
-            'sortierung' => 'int'
+        // Nur die Datenbank-Felder sanitizen - NICHT 'action'!
+        $data = array(
+            'name' => sanitize_text_field($_POST['name']),
+            'beschreibung' => sanitize_textarea_field($_POST['beschreibung']),
+            'kategorie' => sanitize_text_field($_POST['kategorie']),
+            'sortierung' => intval($_POST['sortierung']),
+            'aktiv' => isset($_POST['aktiv']) ? 1 : 0
         );
-        
-        $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
-        $data['aktiv'] = isset($_POST['aktiv']) ? 1 : 0;
         
         // Validation
-        $validation_rules = array(
-            'name' => array('required' => true, 'min_length' => 2),
-            'kategorie' => array('required' => true, 'custom' => function($value) {
-                return CategoryCalculator::is_valid_category($value) ? true : 'Ungültige Kategorie ausgewählt';
-            })
-        );
+        if (empty($data['name']) || strlen($data['name']) < 2) {
+            WettkampfHelpers::add_admin_notice('Name ist erforderlich und muss mindestens 2 Zeichen lang sein.', 'error');
+            return;
+        }
         
-        $validation = SecurityManager::validate_form_data($data, $validation_rules);
+        if (empty($data['kategorie'])) {
+            WettkampfHelpers::add_admin_notice('Kategorie ist erforderlich.', 'error');
+            return;
+        }
         
-        if (!$validation['valid']) {
-            WettkampfHelpers::add_admin_notice('Validierungsfehler: ' . implode(', ', $validation['errors']), 'error');
+        if (!CategoryCalculator::is_valid_category($data['kategorie'])) {
+            WettkampfHelpers::add_admin_notice('Ungültige Kategorie ausgewählt.', 'error');
             return;
         }
         
         global $wpdb;
         $table_name = $wpdb->prefix . 'wettkampf_disziplinen';
         
+        // Check if updating existing discipline
         if (isset($_POST['disziplin_id']) && !empty($_POST['disziplin_id'])) {
-            // Update existing
-            $result = $wpdb->update($table_name, $data, array('id' => intval($_POST['disziplin_id'])));
-            $message = 'Disziplin aktualisiert!';
+            $disziplin_id = intval($_POST['disziplin_id']);
+            
+            $result = $wpdb->update(
+                $table_name, 
+                $data, 
+                array('id' => $disziplin_id),
+                array('%s', '%s', '%s', '%d', '%d'),
+                array('%d')
+            );
+            
+            if ($result !== false) {
+                WettkampfHelpers::add_admin_notice('Disziplin aktualisiert!');
+                // Redirect to clean URL
+                wp_redirect(admin_url('admin.php?page=wettkampf-disziplinen'));
+                exit;
+            } else {
+                WettkampfHelpers::add_admin_notice('Fehler beim Aktualisieren der Disziplin: ' . $wpdb->last_error, 'error');
+            }
         } else {
-            // Insert new
-            $result = $wpdb->insert($table_name, $data);
-            $message = 'Disziplin erstellt!';
-        }
-        
-        if ($result !== false) {
-            WettkampfHelpers::add_admin_notice($message);
-            // Redirect to clean URL
-            wp_redirect(admin_url('admin.php?page=wettkampf-disziplinen'));
-            exit;
-        } else {
-            WettkampfHelpers::add_admin_notice('Fehler beim Speichern der Disziplin', 'error');
+            // Insert new discipline
+            $result = $wpdb->insert(
+                $table_name, 
+                $data,
+                array('%s', '%s', '%s', '%d', '%d')
+            );
+            
+            if ($result !== false) {
+                WettkampfHelpers::add_admin_notice('Disziplin erstellt!');
+                // Redirect to clean URL
+                wp_redirect(admin_url('admin.php?page=wettkampf-disziplinen'));
+                exit;
+            } else {
+                WettkampfHelpers::add_admin_notice('Fehler beim Erstellen der Disziplin: ' . $wpdb->last_error, 'error');
+            }
         }
     }
     
@@ -245,7 +267,10 @@ class AdminDisziplinen {
      * Delete discipline
      */
     public function delete_disziplin($id) {
-        SecurityManager::check_admin_permissions();
+        if (!current_user_can('manage_options')) {
+            WettkampfHelpers::add_admin_notice('Keine Berechtigung!', 'error');
+            return false;
+        }
         
         global $wpdb;
         $tables = WettkampfDatabase::get_table_names();
@@ -255,7 +280,9 @@ class AdminDisziplinen {
         $wpdb->delete($tables['anmeldung_disziplinen'], array('disziplin_id' => $id));
         
         // Delete discipline
-        return $wpdb->delete($tables['disziplinen'], array('id' => $id));
+        $result = $wpdb->delete($tables['disziplinen'], array('id' => $id));
+        
+        return $result !== false;
     }
     
     /**
