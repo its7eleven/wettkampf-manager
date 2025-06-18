@@ -318,13 +318,6 @@ jQuery(document).ready(function($) {
         }, 100);
     }
     
-    // Print functionality
-    if ($('.export-section').length) {
-        $('.export-section .export-buttons').append(
-            '<button type="button" class="export-button print-button" onclick="window.print()" style="background: #6c757d;">🖨️ Drucken</button>'
-        );
-    }
-    
     // Success message auto-hide
     $('.notice-success').delay(5000).fadeOut(500);
     
