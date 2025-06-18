@@ -84,31 +84,38 @@ jQuery(document).ready(function($) {
     });
     
     // Toggle functionality for freie_plaetze in edit forms
-    function toggleFreePlaetze(radio) {
-        const row = document.getElementById('freie_plaetze_row');
-        const input = document.getElementById('freie_plaetze');
+    function toggleFreePlaetze() {
+        const selectedValue = $('input[name="eltern_fahren"]:checked').val();
+        const row = $('#freie_plaetze_row');
+        const input = $('#freie_plaetze');
         
-        if (radio && row && input) {
-            if (radio.value == '1') {
-                row.style.display = '';
-                input.setAttribute('required', 'required');
+        console.log('toggleFreePlaetze called, selected:', selectedValue);
+        
+        if (row.length && input.length) {
+            if (selectedValue === 'ja') {
+                row.show();
+                input.attr('required', 'required');
             } else {
-                row.style.display = 'none';
-                input.removeAttribute('required');
-                input.value = '';
+                row.hide();
+                input.removeAttr('required');
+                if (selectedValue !== 'ja') {
+                    input.val('0');
+                }
             }
         }
     }
     
     // Attach toggle functionality to radio buttons
-    $('input[name="eltern_fahren"]').on('change', function() {
-        toggleFreePlaetze(this);
+    $(document).on('change', 'input[name="eltern_fahren"]', function() {
+        console.log('Transport option changed to:', $(this).val());
+        toggleFreePlaetze();
     });
     
     // Initialize toggle state on page load
-    const checkedRadio = $('input[name="eltern_fahren"]:checked')[0];
-    if (checkedRadio) {
-        toggleFreePlaetze(checkedRadio);
+    if ($('input[name="eltern_fahren"]').length > 0) {
+        setTimeout(function() {
+            toggleFreePlaetze();
+        }, 100);
     }
     
     // Add sorting functionality to tables (simple client-side)
@@ -175,14 +182,6 @@ jQuery(document).ready(function($) {
         setTimeout(function() {
             card.addClass('animate-in');
         }, index * 100);
-    });
-    
-    // Add tooltips for action buttons
-    $('a[title]').each(function() {
-        $(this).tooltip({
-            show: { delay: 500 },
-            hide: { delay: 100 }
-        });
     });
     
     // Form validation enhancements
@@ -284,9 +283,6 @@ jQuery(document).ready(function($) {
             // localStorage not available
         }
     });
-    
-    // ENTFERNT: Warn about unsaved changes - Diese Funktion verursacht das Problem
-    // Die beforeunload Warnung wurde komplett entfernt
     
     // Accessibility improvements
     

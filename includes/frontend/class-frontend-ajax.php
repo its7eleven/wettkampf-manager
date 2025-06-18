@@ -1,6 +1,6 @@
 <?php
 /**
- * Frontend AJAX functionality
+ * Frontend AJAX functionality - KORRIGIERT für Update-Funktion
  */
 
 // Prevent direct access
@@ -124,6 +124,11 @@ class FrontendAjax {
                 $this->send_json_error('Ungültige Transport-Option gewählt');
             }
             
+            // Handle freie_plaetze
+            if ($data['eltern_fahren'] !== 'ja') {
+                $data['freie_plaetze'] = 0;
+            }
+            
             // Save registration
             $anmeldung_id = WettkampfDatabase::save_registration($data);
             
@@ -165,10 +170,13 @@ class FrontendAjax {
                 $this->verify_registration_ownership($anmeldung_id);
             } elseif ($action_type === 'delete') {
                 $this->delete_registration($anmeldung_id);
-            } else {
+            } elseif ($action_type === 'update') {
                 $this->update_registration($anmeldung_id);
+            } else {
+                $this->send_json_error('Ungültige Aktion');
             }
         } catch (Exception $e) {
+            WettkampfHelpers::log_error('Mutation error: ' . $e->getMessage());
             $this->send_json_error('Ein Fehler ist aufgetreten: ' . $e->getMessage());
         }
     }
@@ -227,50 +235,82 @@ class FrontendAjax {
     }
     
     /**
-     * Update registration
+     * Update registration - KORRIGIERT
      */
     private function update_registration($anmeldung_id) {
-        // Sanitize data
-        $sanitization_rules = array(
-            'vorname' => 'text',
-            'name' => 'text',
-            'email' => 'email',
-            'geschlecht' => 'text',
-            'jahrgang' => 'int',
-            'eltern_fahren' => 'text',
-            'freie_plaetze' => 'int',
-            'disziplinen' => 'array'
-        );
-        
-        $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
-        
-        // Validation
-        $validation_rules = array(
-            'vorname' => array('required' => true, 'min_length' => 2),
-            'name' => array('required' => true, 'min_length' => 2),
-            'email' => array('required' => true, 'email' => true),
-            'geschlecht' => array('required' => true),
-            'jahrgang' => array('required' => true, 'year' => true),
-            'eltern_fahren' => array('required' => true)
-        );
-        
-        $validation = SecurityManager::validate_form_data($data, $validation_rules);
-        
-        if (!$validation['valid']) {
-            $this->send_json_error('Validierungsfehler: ' . implode(', ', $validation['errors']));
-        }
-        
-        // Validate eltern_fahren value
-        if (!in_array($data['eltern_fahren'], array('ja', 'nein', 'direkt'))) {
-            $this->send_json_error('Ungültige Transport-Option gewählt');
-        }
-        
-        $result = WettkampfDatabase::save_registration($data, $anmeldung_id);
-        
-        if ($result !== false) {
-            $this->send_json_success('Anmeldung erfolgreich aktualisiert');
-        } else {
-            $this->send_json_error('Fehler beim Aktualisieren');
+        try {
+            WettkampfHelpers::log_error('Update registration started for ID: ' . $anmeldung_id);
+            
+            // Get wettkampf_id from existing registration
+            global $wpdb;
+            $tables = WettkampfDatabase::get_table_names();
+            $existing = $wpdb->get_row($wpdb->prepare(
+                "SELECT wettkampf_id FROM {$tables['anmeldung']} WHERE id = %d", 
+                $anmeldung_id
+            ));
+            
+            if (!$existing) {
+                $this->send_json_error('Anmeldung nicht gefunden');
+            }
+            
+            // Sanitize data
+            $sanitization_rules = array(
+                'vorname' => 'text',
+                'name' => 'text',
+                'email' => 'email',
+                'geschlecht' => 'text',
+                'jahrgang' => 'int',
+                'eltern_fahren' => 'text',
+                'freie_plaetze' => 'int',
+                'disziplinen' => 'array'
+            );
+            
+            $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
+            
+            // Add wettkampf_id from existing registration
+            $data['wettkampf_id'] = $existing->wettkampf_id;
+            
+            // Validation
+            $validation_rules = array(
+                'vorname' => array('required' => true, 'min_length' => 2),
+                'name' => array('required' => true, 'min_length' => 2),
+                'email' => array('required' => true, 'email' => true),
+                'geschlecht' => array('required' => true),
+                'jahrgang' => array('required' => true, 'year' => true),
+                'eltern_fahren' => array('required' => true)
+            );
+            
+            $validation = SecurityManager::validate_form_data($data, $validation_rules);
+            
+            if (!$validation['valid']) {
+                $this->send_json_error('Validierungsfehler: ' . implode(', ', $validation['errors']));
+            }
+            
+            // Validate eltern_fahren value
+            if (!in_array($data['eltern_fahren'], array('ja', 'nein', 'direkt'))) {
+                $this->send_json_error('Ungültige Transport-Option gewählt');
+            }
+            
+            // Handle freie_plaetze
+            if ($data['eltern_fahren'] !== 'ja') {
+                $data['freie_plaetze'] = 0;
+            }
+            
+            WettkampfHelpers::log_error('Update data prepared: ' . print_r($data, true));
+            
+            $result = WettkampfDatabase::save_registration($data, $anmeldung_id);
+            
+            if ($result !== false) {
+                WettkampfHelpers::log_error('Update successful for ID: ' . $anmeldung_id);
+                $this->send_json_success('Anmeldung erfolgreich aktualisiert');
+            } else {
+                WettkampfHelpers::log_error('Update failed for ID: ' . $anmeldung_id);
+                $this->send_json_error('Fehler beim Aktualisieren der Anmeldung');
+            }
+            
+        } catch (Exception $e) {
+            WettkampfHelpers::log_error('Update exception: ' . $e->getMessage());
+            $this->send_json_error('Fehler: ' . $e->getMessage());
         }
     }
     
