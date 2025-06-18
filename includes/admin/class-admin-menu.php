@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin menu management
+ * Admin menu management - ERWEITERT mit Debug-Seite
  */
 
 // Prevent direct access
@@ -70,6 +70,18 @@ class AdminMenu {
             'wettkampf-export-status',
             array($this, 'display_export_status_page')
         );
+        
+        // Debug-Seite (nur wenn WP_DEBUG aktiv)
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            add_submenu_page(
+                'wettkampf-manager',
+                'Debug',
+                'Debug 🐛',
+                'manage_options',
+                'wettkampf-debug',
+                array($this, 'display_debug_page')
+            );
+        }
     }
     
     /**
@@ -118,6 +130,19 @@ class AdminMenu {
     public function display_export_status_page() {
         $export_admin = new AdminExport();
         $export_admin->display_status_page();
+    }
+    
+    /**
+     * Display debug page
+     */
+    public function display_debug_page() {
+        // Lade Debug-Klasse wenn noch nicht geladen
+        if (!class_exists('AdminDebug')) {
+            require_once WETTKAMPF_PLUGIN_PATH . 'includes/admin/class-admin-debug.php';
+        }
+        
+        $debug_admin = new AdminDebug();
+        $debug_admin->display_page();
     }
     
     /**

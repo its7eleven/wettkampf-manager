@@ -1,6 +1,6 @@
 <?php
 /**
- * Email management utility - Mit korrekten Umlauten
+ * Email management utility - KORRIGIERT für Auto-Export
  */
 
 // Prevent direct access
@@ -115,9 +115,16 @@ class EmailManager {
     }
     
     /**
-     * Send automatic export email
+     * Send automatic export email - KORRIGIERT
      */
     public function send_automatic_export($wettkampf, $recipient_email) {
+        WettkampfHelpers::log_error('send_automatic_export: Start für Wettkampf ' . $wettkampf->name . ' an ' . $recipient_email);
+        
+        // Stelle sicher, dass WettkampfDatabase geladen ist
+        if (!class_exists('WettkampfDatabase')) {
+            require_once WETTKAMPF_PLUGIN_PATH . 'includes/core/class-wettkampf-database.php';
+        }
+        
         $csv_content = $this->generate_csv_export($wettkampf->id);
         
         if (!$csv_content) {
@@ -125,13 +132,29 @@ class EmailManager {
             return false;
         }
         
+        WettkampfHelpers::log_error('CSV-Export generiert, Länge: ' . strlen($csv_content) . ' bytes');
+        
         // Create temporary file
         $upload_dir = wp_upload_dir();
+        $temp_dir = $upload_dir['path'];
+        
+        // Stelle sicher, dass das Verzeichnis existiert
+        if (!file_exists($temp_dir)) {
+            wp_mkdir_p($temp_dir);
+        }
+        
         $safe_name = WettkampfHelpers::sanitize_filename($wettkampf->name);
         $filename = $safe_name . '_anmeldungen_' . date('Y-m-d') . '.csv';
-        $temp_file = $upload_dir['path'] . '/' . $filename;
+        $temp_file = $temp_dir . '/' . $filename;
         
-        file_put_contents($temp_file, $csv_content);
+        $bytes_written = file_put_contents($temp_file, $csv_content);
+        
+        if ($bytes_written === false) {
+            WettkampfHelpers::log_error('Konnte temporäre Datei nicht schreiben: ' . $temp_file);
+            return false;
+        }
+        
+        WettkampfHelpers::log_error('Temporäre Datei geschrieben: ' . $temp_file . ' (' . $bytes_written . ' bytes)');
         
         // Build email
         $subject = 'Anmeldungen für ' . $wettkampf->name . ' (Anmeldeschluss abgelaufen)';
@@ -142,6 +165,7 @@ class EmailManager {
         // Clean up temporary file
         if (file_exists($temp_file)) {
             unlink($temp_file);
+            WettkampfHelpers::log_error('Temporäre Datei gelöscht');
         }
         
         if ($result) {
@@ -186,6 +210,7 @@ class EmailManager {
         // Get competition info
         $wettkampf = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$tables['wettkampf']} WHERE id = %d", $wettkampf_id));
         if (!$wettkampf) {
+            WettkampfHelpers::log_error('generate_csv_export: Wettkampf nicht gefunden');
             return false;
         }
         
@@ -197,6 +222,8 @@ class EmailManager {
             WHERE a.wettkampf_id = %d
             ORDER BY a.anmeldedatum ASC
         ", $wettkampf_id));
+        
+        WettkampfHelpers::log_error('generate_csv_export: ' . count($anmeldungen) . ' Anmeldungen gefunden');
         
         // Start output buffering
         ob_start();
@@ -251,22 +278,62 @@ class EmailManager {
             echo implode(';', $row) . "\r\n";
         }
         
-        return ob_get_clean();
+        $content = ob_get_clean();
+        
+        WettkampfHelpers::log_error('generate_csv_export: CSV generiert, Länge: ' . strlen($content));
+        
+        return $content;
     }
     
     /**
-     * Send email with optional attachments
+     * Send email with optional attachments - VERBESSERT mit mehr Debug-Info
      */
     private function send_email($to, $subject, $message, $attachments = array()) {
         $sender_email = WettkampfHelpers::get_option('sender_email', get_option('admin_email'));
         $sender_name = WettkampfHelpers::get_option('sender_name', get_option('blogname'));
+        
+        WettkampfHelpers::log_error('send_email: Von ' . $sender_name . ' <' . $sender_email . '> an ' . $to);
+        WettkampfHelpers::log_error('send_email: Betreff: ' . $subject);
+        
+        if (!empty($attachments)) {
+            WettkampfHelpers::log_error('send_email: Anhänge: ' . implode(', ', $attachments));
+            
+            // Prüfe ob Anhänge existieren
+            foreach ($attachments as $attachment) {
+                if (!file_exists($attachment)) {
+                    WettkampfHelpers::log_error('send_email: WARNUNG - Anhang existiert nicht: ' . $attachment);
+                } else {
+                    $size = filesize($attachment);
+                    WettkampfHelpers::log_error('send_email: Anhang OK: ' . basename($attachment) . ' (' . $size . ' bytes)');
+                }
+            }
+        }
         
         $headers = array(
             'Content-Type: text/plain; charset=UTF-8',
             'From: ' . $sender_name . ' <' . $sender_email . '>'
         );
         
-        return wp_mail($to, $subject, $message, $headers, $attachments);
+        $result = wp_mail($to, $subject, $message, $headers, $attachments);
+        
+        if ($result) {
+            WettkampfHelpers::log_error('send_email: E-Mail erfolgreich gesendet');
+        } else {
+            WettkampfHelpers::log_error('send_email: FEHLER beim E-Mail-Versand');
+            
+            // Prüfe PHP mail() Funktion
+            if (!function_exists('mail')) {
+                WettkampfHelpers::log_error('send_email: PHP mail() Funktion nicht verfügbar!');
+            }
+            
+            // Prüfe wp_mail Fehler
+            global $phpmailer;
+            if (isset($phpmailer) && is_object($phpmailer) && !empty($phpmailer->ErrorInfo)) {
+                WettkampfHelpers::log_error('send_email: PHPMailer Fehler: ' . $phpmailer->ErrorInfo);
+            }
+        }
+        
+        return $result;
     }
     
     /**
