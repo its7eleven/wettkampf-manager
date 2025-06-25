@@ -1,6 +1,6 @@
 <?php
 /**
- * Settings management admin class
+ * Settings management admin class - ERWEITERT mit Multi-E-Mail Support
  */
 
 // Prevent direct access
@@ -70,7 +70,7 @@ class AdminSettings {
                         WettkampfHelpers::render_form_row(
                             'Absender E-Mail',
                             '<input type="email" id="sender_email" name="sender_email" value="' . SecurityManager::escape_attr($sender_email) . '" class="regular-text">',
-                            'E-Mail-Adresse für ausgehende Nachrichten (Bestätigungen, etc.)'
+                            'E-Mail-Adresse für ausgehende Nachrichten (Bestätigungen, etc.) - <strong>NUR eine E-Mail-Adresse</strong>'
                         );
                         
                         WettkampfHelpers::render_form_row(
@@ -103,20 +103,28 @@ class AdminSettings {
                     <table class="form-table">
                         <?php
                         WettkampfHelpers::render_form_row(
-                            'Export E-Mail',
-                            '<input type="email" id="export_email" name="export_email" value="' . SecurityManager::escape_attr($export_email) . '" class="regular-text">',
-                            'E-Mail-Adresse für automatische CSV-Exports nach Anmeldeschluss (2 Stunden nach Mitternacht)'
+                            'Export E-Mail-Adressen',
+                            '<textarea id="export_email" name="export_email" rows="3" class="large-text" placeholder="max@mustermann.de&#10;trainer@verein.de&#10;vorstand@verein.de">' . SecurityManager::escape_html($export_email) . '</textarea>',
+                            'E-Mail-Adressen für automatische CSV-Exports nach Anmeldeschluss (eine pro Zeile, max. 5 Adressen)'
                         );
                         ?>
                     </table>
                     
-                    <?php if (!empty($export_email)): ?>
+                    <?php 
+                    $export_emails = $this->parse_export_emails($export_email);
+                    if (!empty($export_emails)): 
+                    ?>
                         <div class="notice notice-success inline" style="margin: 10px 0; padding: 8px 12px;">
-                            <p style="margin: 0;"><strong>✓ Automatische Exports sind aktiviert</strong></p>
+                            <p style="margin: 0;"><strong>✓ Automatische Exports sind aktiviert für:</strong></p>
+                            <ul style="margin: 5px 0 0 20px;">
+                                <?php foreach ($export_emails as $email): ?>
+                                    <li><?php echo SecurityManager::escape_html($email); ?></li>
+                                <?php endforeach; ?>
+                            </ul>
                         </div>
                     <?php else: ?>
                         <div class="notice notice-warning inline" style="margin: 10px 0; padding: 8px 12px;">
-                            <p style="margin: 0;"><strong>⚠ Automatische Exports sind deaktiviert</strong> (keine E-Mail-Adresse hinterlegt)</p>
+                            <p style="margin: 0;"><strong>⚠ Automatische Exports sind deaktiviert</strong> (keine gültigen E-Mail-Adressen hinterlegt)</p>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -133,9 +141,10 @@ class AdminSettings {
                 <ul>
                     <li>Das System prüft stündlich, ob Anmeldefristen abgelaufen sind</li>
                     <li>2 Stunden nach Mitternacht des Anmeldeschlusstages wird automatisch ein CSV-Export generiert</li>
-                    <li>Der Export wird an die oben konfigurierte E-Mail-Adresse gesendet</li>
+                    <li>Der Export wird an alle konfigurierten E-Mail-Adressen gesendet</li>
                     <li>Pro Wettkampf wird nur einmal ein automatischer Export versendet</li>
                     <li>CSV-Format für beste Kompatibilität mit allen E-Mail-Clients und Mobilgeräten</li>
+                    <li><strong>Multi-E-Mail:</strong> Du kannst bis zu 5 E-Mail-Adressen angeben (eine pro Zeile)</li>
                 </ul>
                 
                 <p><strong>Technische Details:</strong></p>
@@ -144,6 +153,7 @@ class AdminSettings {
                     <li>Export-Zeitfenster: 02:00 - 03:00 Uhr</li>
                     <li>Nur Wettkämpfe mit Anmeldungen werden exportiert</li>
                     <li>UTF-8 Kodierung mit BOM für korrekte Umlaute</li>
+                    <li>Jede E-Mail-Adresse wird separat validiert</li>
                 </ul>
                 
                 <?php
@@ -154,6 +164,18 @@ class AdminSettings {
                 <?php endif; ?>
                 
                 <p><strong>Status prüfen:</strong> <a href="?page=wettkampf-export-status">Auto-Export Status ansehen</a></p>
+            </div>
+            
+            <!-- E-Mail Guidelines -->
+            <div style="margin-top: 20px; padding: 20px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                <h3>📧 E-Mail-Richtlinien</h3>
+                <ul>
+                    <li><strong>Absender E-Mail:</strong> Nur EINE E-Mail-Adresse erlaubt (WordPress-Standard)</li>
+                    <li><strong>Export E-Mails:</strong> Mehrere E-Mail-Adressen möglich (eine pro Zeile, max. 5)</li>
+                    <li><strong>Validierung:</strong> Ungültige E-Mail-Adressen werden automatisch ignoriert</li>
+                    <li><strong>Sicherheit:</strong> Alle E-Mail-Adressen werden vor der Speicherung validiert</li>
+                    <li><strong>Performance:</strong> Begrenzung auf 5 Adressen verhindert Missbrauch</li>
+                </ul>
             </div>
             
             <!-- Security Information -->
@@ -201,12 +223,50 @@ class AdminSettings {
             border-left-color: #dba617;
             background: #fcf9e8;
         }
+        
+        #export_email {
+            font-family: monospace;
+            font-size: 13px;
+        }
         </style>
         <?php
     }
     
     /**
-     * Save settings
+     * Parse and validate export email addresses
+     */
+    private function parse_export_emails($export_email_text) {
+        if (empty($export_email_text)) {
+            return array();
+        }
+        
+        $lines = explode("\n", $export_email_text);
+        $valid_emails = array();
+        
+        foreach ($lines as $line) {
+            $email = trim($line);
+            
+            // Skip empty lines
+            if (empty($email)) {
+                continue;
+            }
+            
+            // Validate email
+            if (is_email($email)) {
+                $valid_emails[] = $email;
+                
+                // Limit to 5 addresses
+                if (count($valid_emails) >= 5) {
+                    break;
+                }
+            }
+        }
+        
+        return $valid_emails;
+    }
+    
+    /**
+     * Save settings - ERWEITERT mit Multi-E-Mail Support
      */
     private function save_settings() {
         SecurityManager::check_admin_permissions();
@@ -217,23 +277,31 @@ class AdminSettings {
             'recaptcha_secret_key' => 'text',
             'sender_email' => 'email',
             'sender_name' => 'text',
-            'export_email' => 'email'
+            'export_email' => 'textarea'
         );
         
         $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
         
-        // Validation
-        $validation_rules = array(
-            'sender_email' => array('email' => true),
-            'export_email' => array('email' => true)
-        );
-        
-        $validation = SecurityManager::validate_form_data($data, $validation_rules);
-        
-        if (!$validation['valid']) {
-            WettkampfHelpers::add_admin_notice('Validierungsfehler: ' . implode(', ', $validation['errors']), 'error');
+        // Validation for sender email (single email only)
+        if (!empty($data['sender_email']) && !is_email($data['sender_email'])) {
+            WettkampfHelpers::add_admin_notice('Absender E-Mail ist ungültig', 'error');
             return;
         }
+        
+        // Validate and clean export emails
+        $export_emails = $this->parse_export_emails($data['export_email']);
+        $invalid_count = 0;
+        
+        if (!empty($data['export_email'])) {
+            $all_lines = explode("\n", $data['export_email']);
+            $total_lines = count(array_filter($all_lines, function($line) {
+                return !empty(trim($line));
+            }));
+            $invalid_count = $total_lines - count($export_emails);
+        }
+        
+        // Convert valid emails back to text format
+        $data['export_email'] = implode("\n", $export_emails);
         
         // Save settings
         $settings_saved = true;
@@ -245,7 +313,17 @@ class AdminSettings {
         $settings_saved &= WettkampfHelpers::update_option('export_email', $data['export_email']);
         
         if ($settings_saved) {
-            WettkampfHelpers::add_admin_notice('Einstellungen gespeichert!');
+            $message = 'Einstellungen gespeichert!';
+            
+            if (count($export_emails) > 0) {
+                $message .= ' Export aktiviert für ' . count($export_emails) . ' E-Mail-Adresse(n).';
+            }
+            
+            if ($invalid_count > 0) {
+                $message .= ' ' . $invalid_count . ' ungültige E-Mail-Adresse(n) wurden ignoriert.';
+            }
+            
+            WettkampfHelpers::add_admin_notice($message);
         } else {
             WettkampfHelpers::add_admin_notice('Fehler beim Speichern der Einstellungen', 'error');
         }
@@ -296,6 +374,15 @@ class AdminSettings {
      */
     public function is_auto_export_configured() {
         $export_email = $this->get_setting('export_email');
-        return !empty($export_email) && is_email($export_email);
+        $valid_emails = $this->parse_export_emails($export_email);
+        return !empty($valid_emails);
+    }
+    
+    /**
+     * Get all valid export email addresses
+     */
+    public function get_export_emails() {
+        $export_email = $this->get_setting('export_email');
+        return $this->parse_export_emails($export_email);
     }
 }
