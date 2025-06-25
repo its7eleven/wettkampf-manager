@@ -1,472 +1,513 @@
-/* Wettkampf Manager Admin Styles */
+<?php
+/**
+ * Competition management admin class - ERWEITERT mit Suchfunktion
+ */
 
-.wettkampf-admin {
-    max-width: 1200px;
+// Prevent direct access
+if (!defined('ABSPATH')) {
+    exit;
 }
 
-/* Admin tables */
-.wp-list-table.wettkampf-table {
-    background: #fff;
-    border: 1px solid #c3c4c7;
-    box-shadow: 0 1px 1px rgba(0,0,0,.04);
-}
+class AdminWettkampf {
+    
+    /**
+     * Display overview page - ERWEITERT mit Suchfunktion und Kopierfunktion
+     */
+    public function display_overview_page() {
+        // Handle delete action
+        if (isset($_GET['delete']) && wp_verify_nonce($_GET['_wpnonce'], 'delete_wettkampf')) {
+            $id = intval($_GET['delete']);
+            $this->delete_wettkampf_by_id($id);
+            WettkampfHelpers::add_admin_notice('Wettkampf und alle Anmeldungen gelöscht!');
+        }
+        
+        // Handle copy action
+        if (isset($_GET['copy']) && wp_verify_nonce($_GET['_wpnonce'], 'copy_wettkampf')) {
+            $id = intval($_GET['copy']);
+            $new_id = $this->copy_wettkampf($id);
+            if ($new_id) {
+                WettkampfHelpers::add_admin_notice('Wettkampf erfolgreich kopiert! Du kannst ihn jetzt bearbeiten.');
+                // Redirect to edit the new competition
+                wp_redirect(admin_url('admin.php?page=wettkampf-new&edit=' . $new_id));
+                exit;
+            } else {
+                WettkampfHelpers::add_admin_notice('Fehler beim Kopieren des Wettkampfs.', 'error');
+            }
+        }
+        
+        // Get filter parameters
+        $current_filter = isset($_GET['filter']) ? sanitize_text_field($_GET['filter']) : 'all';
+        $search_term = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
+        
+        $wettkaempfe = WettkampfDatabase::get_competitions_with_counts($current_filter, $search_term);
+        
+        // Calculate counts for tabs (without search)
+        $alle_count = count(WettkampfDatabase::get_competitions_with_counts('all'));
+        $aktive_count = count(WettkampfDatabase::get_competitions_with_counts('active'));
+        $vergangene_count = count(WettkampfDatabase::get_competitions_with_counts('inactive'));
+        
+        ?>
+        <div class="wrap">
+            <h1>Wettkampf Manager <a href="?page=wettkampf-new" class="page-title-action">Neuer Wettkampf</a></h1>
+            
+            <!-- Search Form -->
+            <div class="wettkampf-search-form">
+                <form method="get" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; width: 100%;">
+                    <input type="hidden" name="page" value="wettkampf-manager">
+                    <input type="hidden" name="filter" value="<?php echo esc_attr($current_filter); ?>">
+                    
+                    <label for="search" style="margin: 0; font-weight: 600;">🔍 Suche:</label>
+                    <input type="text" 
+                           id="search" 
+                           name="search" 
+                           value="<?php echo esc_attr($search_term); ?>" 
+                           placeholder="Name, Ort oder Beschreibung durchsuchen..." 
+                           style="min-width: 300px; padding: 8px 12px; flex: 1; max-width: 400px;">
+                    
+                    <button type="submit" class="button">Suchen</button>
+                    
+                    <?php if (!empty($search_term)): ?>
+                        <a href="?page=wettkampf-manager&filter=<?php echo esc_attr($current_filter); ?>" class="button">Zurücksetzen</a>
+                    <?php endif; ?>
+                    
+                    <div style="flex: 1; text-align: right; font-size: 13px; color: #666;">
+                        <strong>Tipp:</strong> Ctrl+F für Schnellsuche
+                    </div>
+                </form>
+                
+                <?php if (!empty($search_term)): ?>
+                    <div class="search-results-info">
+                        <strong>Suchergebnis für:</strong> "<?php echo esc_html($search_term); ?>" 
+                        - <?php echo count($wettkaempfe); ?> Wettkampf<?php echo count($wettkaempfe) != 1 ? 'e' : ''; ?> gefunden
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <!-- Filter Tabs -->
+            <ul class="subsubsub">
+                <li class="all">
+                    <a href="?page=wettkampf-manager&filter=all<?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" 
+                       class="<?php echo $current_filter === 'all' ? 'current' : ''; ?>">
+                        Alle <span class="count">(<?php echo $alle_count; ?>)</span>
+                    </a> |
+                </li>
+                <li class="active">
+                    <a href="?page=wettkampf-manager&filter=active<?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" 
+                       class="<?php echo $current_filter === 'active' ? 'current' : ''; ?>">
+                        Aktive <span class="count">(<?php echo $aktive_count; ?>)</span>
+                    </a> |
+                </li>
+                <li class="inactive">
+                    <a href="?page=wettkampf-manager&filter=inactive<?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" 
+                       class="<?php echo $current_filter === 'inactive' ? 'current' : ''; ?>">
+                        Vergangene <span class="count">(<?php echo $vergangene_count; ?>)</span>
+                    </a>
+                </li>
+            </ul>
 
-.wp-list-table.wettkampf-table th,
-.wp-list-table.wettkampf-table td {
-    padding: 12px;
-    vertical-align: middle;
-}
-
-.wp-list-table.wettkampf-table th {
-    background: #f6f7f7;
-    border-bottom: 1px solid #c3c4c7;
-    font-weight: 600;
-}
-
-.wp-list-table.wettkampf-table tbody tr:nth-child(even) {
-    background: #f9f9f9;
-}
-
-.wp-list-table.wettkampf-table tbody tr:hover {
-    background: #f0f6fc;
-}
-
-/* Status badges */
-.status-badge {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.status-badge.active {
-    background: #00a32a;
-    color: white;
-}
-
-.status-badge.inactive {
-    background: #dba617;
-    color: white;
-}
-
-.status-badge.expired {
-    background: #d63638;
-    color: white;
-}
-
-/* Action links */
-.row-actions {
-    color: #c3c4c7;
-}
-
-.row-actions span {
-    display: inline;
-}
-
-.row-actions a {
-    color: #2271b1;
-    text-decoration: none;
-}
-
-.row-actions a:hover {
-    color: #135e96;
-}
-
-.row-actions .delete a {
-    color: #d63638;
-}
-
-.row-actions .delete a:hover {
-    color: #d63638;
-}
-
-/* Form styling improvements */
-.form-table th {
-    width: 200px;
-    padding: 15px 10px 15px 0;
-    vertical-align: top;
-}
-
-.form-table td {
-    padding: 15px 10px;
-}
-
-.form-table input[type="text"],
-.form-table input[type="email"],
-.form-table input[type="url"],
-.form-table input[type="date"],
-.form-table input[type="number"],
-.form-table select,
-.form-table textarea {
-    border: 1px solid #8c8f94;
-    border-radius: 4px;
-    font-size: 14px;
-    padding: 8px 12px;
-    transition: border-color 0.3s ease;
-}
-
-.form-table input[type="text"]:focus,
-.form-table input[type="email"]:focus,
-.form-table input[type="url"]:focus,
-.form-table input[type="date"]:focus,
-.form-table input[type="number"]:focus,
-.form-table select:focus,
-.form-table textarea:focus {
-    border-color: #2271b1;
-    box-shadow: 0 0 0 1px #2271b1;
-    outline: none;
-}
-
-.form-table .regular-text {
-    width: 350px;
-}
-
-.form-table .large-text {
-    width: 500px;
-}
-
-/* Statistics cards */
-.wettkampf-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin: 20px 0;
-}
-
-.stat-card {
-    background: #fff;
-    border: 1px solid #c3c4c7;
-    border-radius: 4px;
-    padding: 20px;
-    text-align: center;
-    box-shadow: 0 1px 1px rgba(0,0,0,.04);
-}
-
-.stat-card h3 {
-    margin: 0 0 10px 0;
-    color: #1d2327;
-    font-size: 18px;
-}
-
-.stat-number {
-    font-size: 32px;
-    font-weight: 600;
-    color: #2271b1;
-    margin: 10px 0;
-}
-
-.stat-description {
-    color: #646970;
-    font-size: 14px;
-}
-
-/* Notice styling */
-.notice.wettkampf-notice {
-    border-left: 4px solid #00a32a;
-    background: #f0f6fc;
-    padding: 12px;
-    margin: 15px 0;
-}
-
-.notice.wettkampf-notice.error {
-    border-left-color: #d63638;
-    background: #fcf0f1;
-}
-
-.notice.wettkampf-notice.warning {
-    border-left-color: #dba617;
-    background: #fcf9e8;
-}
-
-/* Export/Import section */
-.export-section {
-    background: #fff;
-    border: 1px solid #c3c4c7;
-    border-radius: 4px;
-    padding: 20px;
-    margin: 20px 0;
-}
-
-.export-section h3 {
-    margin-top: 0;
-    color: #1d2327;
-}
-
-.export-buttons {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.export-button {
-    background: #2271b1;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 3px;
-    text-decoration: none;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-}
-
-.export-button:hover {
-    background: #135e96;
-    color: white;
-}
-
-.export-button.csv {
-    background: #00a32a;
-}
-
-.export-button.csv:hover {
-    background: #008a20;
-}
-
-/* Anmeldungen overview */
-.anmeldungen-overview {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-    margin: 20px 0;
-}
-
-.anmeldung-card {
-    background: #fff;
-    border: 1px solid #c3c4c7;
-    border-radius: 4px;
-    padding: 15px;
-    box-shadow: 0 1px 1px rgba(0,0,0,.04);
-}
-
-.anmeldung-card h4 {
-    margin: 0 0 10px 0;
-    color: #1d2327;
-}
-
-.anmeldung-meta {
-    color: #646970;
-    font-size: 13px;
-    margin-bottom: 10px;
-}
-
-.anmeldung-count {
-    font-size: 24px;
-    font-weight: 600;
-    color: #2271b1;
-}
-
-/* Settings page */
-.settings-section {
-    background: #fff;
-    border: 1px solid #c3c4c7;
-    border-radius: 4px;
-    padding: 20px;
-    margin-bottom: 20px;
-}
-
-.settings-section h3 {
-    margin-top: 0;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #c3c4c7;
-    color: #1d2327;
-}
-
-.settings-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 15px 0;
-    border-bottom: 1px solid #f0f0f1;
-}
-
-.settings-row:last-child {
-    border-bottom: none;
-}
-
-.settings-label {
-    flex: 1;
-    padding-right: 20px;
-}
-
-.settings-label h4 {
-    margin: 0 0 5px 0;
-    color: #1d2327;
-}
-
-.settings-label p {
-    margin: 0;
-    color: #646970;
-    font-size: 13px;
-}
-
-.settings-control {
-    flex: 0 0 300px;
-}
-
-/* Help text */
-.help-text {
-    background: #f0f6fc;
-    border: 1px solid #c3c4c7;
-    border-radius: 4px;
-    padding: 15px;
-    margin: 15px 0;
-    font-size: 13px;
-    color: #1d2327;
-}
-
-.help-text h4 {
-    margin: 0 0 10px 0;
-    color: #1d2327;
-}
-
-.help-text ul {
-    margin: 10px 0;
-    padding-left: 20px;
-}
-
-.help-text li {
-    margin-bottom: 5px;
-}
-
-/* Responsive design */
-@media screen and (max-width: 960px) {
-    .wettkampf-stats {
-        grid-template-columns: 1fr;
+            <?php if (empty($wettkaempfe) && !empty($search_term)): ?>
+                <div class="search-no-results">
+                    <h3>🔍 Keine Wettkämpfe gefunden</h3>
+                    <p>Für den Suchbegriff "<strong><?php echo esc_html($search_term); ?></strong>" wurden keine Wettkämpfe gefunden.</p>
+                    <a href="?page=wettkampf-manager&filter=<?php echo esc_attr($current_filter); ?>" class="button button-primary">Alle Wettkämpfe anzeigen</a>
+                    <p style="margin-top: 15px; font-size: 14px; color: #666;">
+                        <strong>Suchbereiche:</strong> Name, Ort, Beschreibung<br>
+                        <strong>Tipp:</strong> Versuche es mit weniger spezifischen Begriffen
+                    </p>
+                </div>
+            <?php elseif (empty($wettkaempfe)): ?>
+                <div class="search-no-results">
+                    <h3>🏃‍♂️ Noch keine Wettkämpfe vorhanden</h3>
+                    <p>Erstelle deinen ersten Wettkampf, um loszulegen.</p>
+                    <a href="?page=wettkampf-new" class="button button-primary">Neuer Wettkampf</a>
+                </div>
+            <?php else: ?>
+                <table class="wp-list-table widefat fixed striped search-results">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">Name</th>
+                            <th style="width: 10%;">Datum</th>
+                            <th style="width: 15%;">Ort</th>
+                            <th style="width: 10%;">Anmeldeschluss</th>
+                            <th style="width: 8%;">Anmeldungen</th>
+                            <th style="width: 8%;">Lizenziert</th>
+                            <th style="width: 14%;">Disziplinen</th>
+                            <th style="width: 10%;">Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($wettkaempfe as $wettkampf): ?>
+                        <tr>
+                            <td>
+                                <strong><?php echo SecurityManager::escape_html($wettkampf->name); ?></strong>
+                                <?php if ($wettkampf->beschreibung && !empty($search_term) && stripos($wettkampf->beschreibung, $search_term) !== false): ?>
+                                    <br><small style="color: #666; font-style: italic;">
+                                        <?php echo WettkampfHelpers::truncate_text($wettkampf->beschreibung, 80); ?>
+                                    </small>
+                                <?php endif; ?>
+                            </td>
+                            <td><?php echo WettkampfHelpers::format_german_date($wettkampf->datum); ?></td>
+                            <td><?php echo SecurityManager::escape_html($wettkampf->ort); ?></td>
+                            <td><?php echo WettkampfHelpers::format_german_date($wettkampf->anmeldeschluss); ?></td>
+                            <td><strong><?php echo $wettkampf->anmeldungen_count; ?></strong></td>
+                            <td><?php echo $wettkampf->lizenziert ? 'Ja' : 'Nein'; ?></td>
+                            <td>
+                                <?php echo $this->get_competition_disciplines_display($wettkampf->id); ?>
+                            </td>
+                            <td>
+                                <a href="?page=wettkampf-new&edit=<?php echo $wettkampf->id; ?>" title="Wettkampf bearbeiten">Bearbeiten</a> |
+                                <a href="?page=wettkampf-manager&copy=<?php echo $wettkampf->id; ?>&_wpnonce=<?php echo wp_create_nonce('copy_wettkampf'); ?>" 
+                                   title="Wettkampf kopieren" 
+                                   onclick="return confirm('Wettkampf &quot;<?php echo SecurityManager::escape_attr($wettkampf->name); ?>&quot; kopieren?\n\nEs wird eine Kopie mit allen Disziplinen erstellt, die du dann bearbeiten kannst.')" 
+                                   style="color: #0073aa;">Kopieren</a> |
+                                <a href="?page=wettkampf-anmeldungen&wettkampf_id=<?php echo $wettkampf->id; ?>" title="Anmeldungen verwalten">Anmeldungen (<?php echo $wettkampf->anmeldungen_count; ?>)</a> |
+                                <a href="?page=wettkampf-manager&delete=<?php echo $wettkampf->id; ?>&_wpnonce=<?php echo wp_create_nonce('delete_wettkampf'); ?>" 
+                                   onclick="return confirm('⚠️ ACHTUNG: Beim Löschen werden auch ALLE Anmeldungen (<?php echo $wettkampf->anmeldungen_count; ?> Stück) gelöscht!\n\nWirklich fortfahren?')" 
+                                   style="color: #d63638;" title="Wettkampf löschen">Löschen</a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+            
+            <?php if (!empty($search_term) && !empty($wettkaempfe)): ?>
+                <div class="search-tips">
+                    <strong>💡 Suchtipps:</strong> Du kannst nach Namen, Orten oder Beschreibungen suchen. 
+                    <a href="?page=wettkampf-manager&filter=<?php echo esc_attr($current_filter); ?>">Alle Wettkämpfe anzeigen</a>
+                </div>
+            <?php endif; ?>
+        </div>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            // Auto-submit on Enter key
+            $('#search').on('keypress', function(e) {
+                if (e.which === 13) {
+                    $(this).closest('form').submit();
+                }
+            });
+            
+            // Keyboard shortcut: Ctrl/Cmd + F to focus search
+            $(document).on('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                    e.preventDefault();
+                    $('#search').focus().select();
+                }
+                
+                // Escape to clear search
+                if (e.key === 'Escape' && $('#search').is(':focus')) {
+                    $('#search').val('');
+                }
+            });
+            
+            // Focus search field if there's a search term
+            <?php if (!empty($search_term)): ?>
+            $('#search').focus().get(0).setSelectionRange(<?php echo strlen($search_term); ?>, <?php echo strlen($search_term); ?>);
+            <?php endif; ?>
+            
+            // Highlight search terms in results
+            function highlightSearchTerms() {
+                var searchTerm = '<?php echo esc_js($search_term); ?>';
+                if (searchTerm.length > 0) {
+                    var regex = new RegExp('(' + searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+                    
+                    $('.wp-list-table tbody td').each(function() {
+                        var text = $(this).html();
+                        var highlightedText = text.replace(regex, '<span class="search-highlight">$1</span>');
+                        if (text !== highlightedText) {
+                            $(this).html(highlightedText);
+                        }
+                    });
+                }
+            }
+            
+            // Apply highlighting
+            <?php if (!empty($search_term)): ?>
+            highlightSearchTerms();
+            <?php endif; ?>
+        });
+        </script>
+        <?php
     }
     
-    .anmeldungen-overview {
-        grid-template-columns: 1fr;
+    /**
+     * Display form page (new/edit)
+     */
+    public function display_form_page() {
+        $wettkampf = null;
+        
+        if (isset($_GET['edit'])) {
+            $id = intval($_GET['edit']);
+            $wettkampf = WettkampfDatabase::get_competition($id);
+        }
+        
+        ?>
+        <div class="wrap">
+            <h1><?php echo $wettkampf ? 'Wettkampf bearbeiten' : 'Neuer Wettkampf'; ?></h1>
+            
+            <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
+                <input type="hidden" name="action" value="save_wettkampf">
+                <?php if ($wettkampf): ?>
+                <input type="hidden" name="wettkampf_id" value="<?php echo $wettkampf->id; ?>">
+                <?php endif; ?>
+                <?php wp_nonce_field('save_wettkampf', 'wettkampf_nonce'); ?>
+                
+                <table class="form-table">
+                    <?php
+                    WettkampfHelpers::render_form_row(
+                        'Name',
+                        '<input type="text" id="name" name="name" value="' . ($wettkampf ? SecurityManager::escape_attr($wettkampf->name) : '') . '" class="regular-text" required>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Datum',
+                        '<input type="date" id="datum" name="datum" value="' . ($wettkampf ? $wettkampf->datum : '') . '" required>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Ort',
+                        '<input type="text" id="ort" name="ort" value="' . ($wettkampf ? SecurityManager::escape_attr($wettkampf->ort) : '') . '" class="regular-text" required>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Beschreibung',
+                        '<textarea id="beschreibung" name="beschreibung" rows="5" class="large-text">' . ($wettkampf ? SecurityManager::escape_html($wettkampf->beschreibung) : '') . '</textarea>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Startberechtigte',
+                        '<textarea id="startberechtigte" name="startberechtigte" rows="3" class="large-text">' . ($wettkampf ? SecurityManager::escape_html($wettkampf->startberechtigte) : '') . '</textarea>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Anmeldeschluss',
+                        '<input type="date" id="anmeldeschluss" name="anmeldeschluss" value="' . ($wettkampf ? $wettkampf->anmeldeschluss : '') . '" required>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Link zum Event',
+                        '<input type="url" id="event_link" name="event_link" value="' . ($wettkampf ? SecurityManager::escape_attr($wettkampf->event_link) : '') . '" class="regular-text">'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Lizenzierter Event',
+                        '<input type="checkbox" id="lizenziert" name="lizenziert" value="1" ' . (($wettkampf && $wettkampf->lizenziert) ? 'checked' : '') . '>'
+                    );
+                    ?>
+                    
+                    <tr>
+                        <th><label for="disziplinen">Disziplinen</label></th>
+                        <td>
+                            <?php echo $this->render_disciplines_selector($wettkampf); ?>
+                        </td>
+                    </tr>
+                </table>
+                
+                <p class="submit">
+                    <input type="submit" name="submit" class="button-primary" value="<?php echo $wettkampf ? 'Aktualisieren' : 'Speichern'; ?>">
+                    <a href="?page=wettkampf-manager" class="button">Abbrechen</a>
+                </p>
+            </form>
+        </div>
+        <?php
     }
     
-    .export-buttons {
-        flex-direction: column;
+    /**
+     * Render disciplines selector
+     */
+    private function render_disciplines_selector($wettkampf) {
+        $grouped_disciplines = WettkampfDatabase::get_disciplines_grouped();
+        
+        // Get selected disciplines
+        $selected_disciplines = array();
+        if ($wettkampf) {
+            global $wpdb;
+            $tables = WettkampfDatabase::get_table_names();
+            $assignments = $wpdb->get_results($wpdb->prepare(
+                "SELECT disziplin_id FROM {$tables['disziplin_zuordnung']} WHERE wettkampf_id = %d", 
+                $wettkampf->id
+            ));
+            foreach ($assignments as $assignment) {
+                $selected_disciplines[] = $assignment->disziplin_id;
+            }
+        }
+        
+        if (empty($grouped_disciplines)) {
+            return '<p><em>Keine Disziplinen verfügbar. <a href="?page=wettkampf-disziplinen">Disziplinen verwalten</a></em></p>';
+        }
+        
+        ob_start();
+        ?>
+        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; background: #f9f9f9;">
+            <div style="margin-bottom: 10px; padding: 5px 10px; background: #e0f2fe; border-radius: 5px; font-size: 12px; color: #0891b2;">
+                <strong>💡 Tipp:</strong> Wähle nur die Disziplinen aus, die für diesen Wettkampf relevant sind. 
+                Die Teilnehmer sehen nur Disziplinen ihrer Alterskategorie.
+            </div>
+            
+            <?php 
+            $sorted_groups = CategoryCalculator::sort_categories($grouped_disciplines);
+            foreach ($sorted_groups as $kategorie => $disziplinen): 
+            ?>
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 10px 0; color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">
+                        <?php echo WettkampfHelpers::get_category_badge($kategorie); ?>
+                    </h4>
+                    <div style="margin-left: 10px;">
+                        <?php foreach ($disziplinen as $disziplin): ?>
+                            <label style="display: block; margin-bottom: 8px; padding: 5px; border-radius: 3px; transition: background-color 0.2s;">
+                                <input type="checkbox" name="disziplinen[]" value="<?php echo $disziplin->id; ?>" 
+                                       <?php echo in_array($disziplin->id, $selected_disciplines) ? 'checked' : ''; ?>>
+                                <strong><?php echo SecurityManager::escape_html($disziplin->name); ?></strong>
+                                <?php if ($disziplin->beschreibung): ?>
+                                    <small style="color: #666; margin-left: 10px;">(<?php echo SecurityManager::escape_html($disziplin->beschreibung); ?>)</small>
+                                <?php endif; ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <small>Lasse alle unausgewählt, wenn dieser Wettkampf keine spezifischen Disziplinen hat.</small>
+        <?php
+        return ob_get_clean();
     }
     
-    .export-button {
-        text-align: center;
+    /**
+     * Get competition disciplines display
+     */
+    private function get_competition_disciplines_display($wettkampf_id) {
+        $disciplines = WettkampfDatabase::get_competition_disciplines($wettkampf_id);
+        
+        $discipline_info = array();
+        if (is_array($disciplines) && !empty($disciplines)) {
+            foreach ($disciplines as $d) {
+                if (is_object($d) && isset($d->name) && !empty($d->name)) {
+                    $info = SecurityManager::escape_html($d->name);
+                    if (!empty($d->kategorie) && $d->kategorie !== 'Alle') {
+                        $info .= ' ' . WettkampfHelpers::get_category_badge($d->kategorie);
+                    }
+                    $discipline_info[] = $info;
+                }
+            }
+        }
+        
+        if (!empty($discipline_info)) {
+            return '<small>' . implode(', ', $discipline_info) . '</small>';
+        } else {
+            return '<small>Keine Disziplinen</small>';
+        }
     }
     
-    .settings-row {
-        flex-direction: column;
-        align-items: flex-start;
+    /**
+     * Save competition
+     */
+    public function save_wettkampf() {
+        // Verify nonce and permissions
+        if (!wp_verify_nonce($_POST['wettkampf_nonce'], 'save_wettkampf')) {
+            wp_die('Sicherheitsfehler');
+        }
+        
+        SecurityManager::check_admin_permissions();
+        
+        // Sanitize and validate data
+        $sanitization_rules = array(
+            'name' => 'text',
+            'datum' => 'text',
+            'ort' => 'text',
+            'beschreibung' => 'textarea',
+            'startberechtigte' => 'textarea',
+            'anmeldeschluss' => 'text',
+            'event_link' => 'url',
+            'disziplinen' => 'array'
+        );
+        
+        $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
+        
+        // Validation rules
+        $validation_rules = array(
+            'name' => array('required' => true, 'min_length' => 3),
+            'datum' => array('required' => true),
+            'ort' => array('required' => true, 'min_length' => 2),
+            'anmeldeschluss' => array('required' => true)
+        );
+        
+        $validation = SecurityManager::validate_form_data($data, $validation_rules);
+        
+        if (!$validation['valid']) {
+            wp_die('Validierungsfehler: ' . implode(', ', $validation['errors']));
+        }
+        
+        // Save competition
+        $wettkampf_id = null;
+        if (isset($_POST['wettkampf_id']) && !empty($_POST['wettkampf_id'])) {
+            $wettkampf_id = intval($_POST['wettkampf_id']);
+        }
+        
+        $result = WettkampfDatabase::save_competition($data, $wettkampf_id);
+        
+        if ($result) {
+            wp_redirect(admin_url('admin.php?page=wettkampf-manager'));
+            exit;
+        } else {
+            wp_die('Fehler beim Speichern des Wettkampfs');
+        }
     }
     
-    .settings-control {
-        flex: none;
-        width: 100%;
-        margin-top: 10px;
-    }
-}
-
-@media screen and (max-width: 782px) {
-    .form-table th,
-    .form-table td {
-        display: block;
-        width: auto;
-        padding: 10px 0;
+    /**
+     * Copy competition with all disciplines
+     */
+    public function copy_wettkampf($original_id) {
+        SecurityManager::check_admin_permissions();
+        
+        // Get original competition
+        $original = WettkampfDatabase::get_competition($original_id);
+        if (!$original) {
+            return false;
+        }
+        
+        // Prepare data for new competition
+        $new_data = array(
+            'name' => $original->name . ' (Kopie)',
+            'datum' => $original->datum,
+            'ort' => $original->ort,
+            'beschreibung' => $original->beschreibung,
+            'startberechtigte' => $original->startberechtigte,
+            'anmeldeschluss' => $original->anmeldeschluss,
+            'event_link' => $original->event_link,
+            'lizenziert' => $original->lizenziert
+        );
+        
+        // Get assigned disciplines
+        global $wpdb;
+        $tables = WettkampfDatabase::get_table_names();
+        $discipline_assignments = $wpdb->get_results($wpdb->prepare(
+            "SELECT disziplin_id FROM {$tables['disziplin_zuordnung']} WHERE wettkampf_id = %d",
+            $original_id
+        ));
+        
+        $discipline_ids = array();
+        foreach ($discipline_assignments as $assignment) {
+            $discipline_ids[] = $assignment->disziplin_id;
+        }
+        
+        $new_data['disziplinen'] = $discipline_ids;
+        
+        // Save new competition
+        $new_id = WettkampfDatabase::save_competition($new_data);
+        
+        if ($new_id) {
+            WettkampfHelpers::log_error('Wettkampf kopiert: Original ID ' . $original_id . ', Neue ID ' . $new_id);
+        }
+        
+        return $new_id;
     }
     
-    .form-table th {
-        border-bottom: none;
+    /**
+     * Delete competition by ID
+     */
+    public function delete_wettkampf_by_id($id) {
+        SecurityManager::check_admin_permissions();
+        return WettkampfDatabase::delete_competition($id);
     }
-    
-    .form-table .regular-text,
-    .form-table .large-text {
-        width: 100%;
-    }
-    
-    .wp-list-table th,
-    .wp-list-table td {
-        padding: 8px;
-    }
-}
-
-/* Loading states */
-.loading-overlay {
-    position: relative;
-}
-
-.loading-overlay::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255, 255, 255, 0.8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10;
-}
-
-.loading-spinner {
-    width: 20px;
-    height: 20px;
-    border: 2px solid #f3f3f3;
-    border-top: 2px solid #2271b1;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Custom button styles */
-.button.wettkampf-primary {
-    background: #2271b1;
-    border-color: #2271b1;
-    color: #fff;
-}
-
-.button.wettkampf-primary:hover {
-    background: #135e96;
-    border-color: #135e96;
-}
-
-.button.wettkampf-danger {
-    background: #d63638;
-    border-color: #d63638;
-    color: #fff;
-}
-
-.button.wettkampf-danger:hover {
-    background: #b32d2e;
-    border-color: #b32d2e;
-}
-
-/* Tooltips */
-.wettkampf-tooltip {
-    position: relative;
-    display: inline-block;
-    cursor: help;
-}
-
-.wettkampf-tooltip .tooltip-text {
-    visibility: hidden;
-    width: 200px;
-    background-color: #1d2327;
-    color: #fff;
-    text-align: center;
-    border-radius: 4px;
-    padding: 8px;
-    position: absolute;
-    z-index: 1;
-    bottom: 125%;
-    left: 50%;
-    margin-left: -100px;
-    opacity: 0;
-    transition: opacity 0.3s;
-    font-size: 12px;
-}
-
-.wettkampf-tooltip:hover .tooltip-text {
-    visibility: visible;
-    opacity: 1;
 }

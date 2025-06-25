@@ -1,6 +1,6 @@
 <?php
 /**
- * Frontend display functionality - Verbessert mit integrierten Disziplinen
+ * Frontend display functionality - Verbessert mit sortierter Disziplinen-Anzeige
  */
 
 // Prevent direct access
@@ -129,7 +129,7 @@ class FrontendDisplay {
     }
     
     /**
-     * Render competition disciplines
+     * Render competition disciplines - MIT SORTIERUNG
      */
     private function render_competition_disciplines($wettkampf_id) {
         $wettkampf_disciplines = WettkampfDatabase::get_competition_disciplines($wettkampf_id);
@@ -146,6 +146,18 @@ class FrontendDisplay {
                 $grouped_disciplines[$category] = array();
             }
             $grouped_disciplines[$category][] = $discipline;
+        }
+        
+        // Sortiere Disziplinen innerhalb jeder Kategorie nach Sortierung und Name
+        foreach ($grouped_disciplines as $category => $disciplines) {
+            usort($grouped_disciplines[$category], function($a, $b) {
+                // Erst nach Sortierung sortieren (niedrigere Zahlen zuerst)
+                if ($a->sortierung != $b->sortierung) {
+                    return $a->sortierung - $b->sortierung;
+                }
+                // Dann alphabetisch nach Name
+                return strcmp($a->name, $b->name);
+            });
         }
         
         ob_start();
@@ -297,10 +309,20 @@ class FrontendDisplay {
     }
     
     /**
-     * Get participant disciplines as string
+     * Get participant disciplines as string - MIT SORTIERUNG
      */
     private function get_participant_disciplines($anmeldung_id) {
-        $anmeldung_disciplines = WettkampfDatabase::get_registration_disciplines($anmeldung_id);
+        global $wpdb;
+        $tables = WettkampfDatabase::get_table_names();
+        
+        // Disziplinen mit Sortierung laden
+        $anmeldung_disciplines = $wpdb->get_results($wpdb->prepare("
+            SELECT d.* 
+            FROM {$tables['anmeldung_disziplinen']} ad 
+            JOIN {$tables['disziplinen']} d ON ad.disziplin_id = d.id 
+            WHERE ad.anmeldung_id = %d 
+            ORDER BY d.sortierung ASC, d.name ASC
+        ", $anmeldung_id));
         
         $discipline_names = array();
         if (is_array($anmeldung_disciplines) && !empty($anmeldung_disciplines)) {

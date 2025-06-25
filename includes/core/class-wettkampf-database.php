@@ -26,11 +26,33 @@ class WettkampfDatabase {
     }
     
     /**
-     * Get all competitions with registration count
+     * Get all competitions with registration count - ERWEITERT mit Suchfunktion
      */
-    public static function get_competitions_with_counts($filter = 'all') {
+    public static function get_competitions_with_counts($filter = 'all', $search_term = '') {
         global $wpdb;
         $tables = self::get_table_names();
+        
+        $where_conditions = array();
+        $where_params = array();
+        
+        // Filter by status
+        switch ($filter) {
+            case 'active':
+                $where_conditions[] = "w.datum >= CURDATE()";
+                break;
+            case 'inactive':
+                $where_conditions[] = "w.datum < CURDATE()";
+                break;
+        }
+        
+        // Search functionality
+        if (!empty($search_term)) {
+            $search_term = '%' . $wpdb->esc_like($search_term) . '%';
+            $where_conditions[] = "(w.name LIKE %s OR w.ort LIKE %s OR w.beschreibung LIKE %s)";
+            $where_params[] = $search_term;
+            $where_params[] = $search_term;
+            $where_params[] = $search_term;
+        }
         
         $query = "
             SELECT w.*, COUNT(a.id) as anmeldungen_count 
@@ -38,18 +60,17 @@ class WettkampfDatabase {
             LEFT JOIN {$tables['anmeldung']} a ON w.id = a.wettkampf_id 
         ";
         
-        switch ($filter) {
-            case 'active':
-                $query .= " WHERE w.datum >= CURDATE() ";
-                break;
-            case 'inactive':
-                $query .= " WHERE w.datum < CURDATE() ";
-                break;
+        if (!empty($where_conditions)) {
+            $query .= " WHERE " . implode(' AND ', $where_conditions);
         }
         
         $query .= " GROUP BY w.id ORDER BY w.datum DESC";
         
-        return $wpdb->get_results($query);
+        if (!empty($where_params)) {
+            return $wpdb->get_results($wpdb->prepare($query, $where_params));
+        } else {
+            return $wpdb->get_results($query);
+        }
     }
     
     /**

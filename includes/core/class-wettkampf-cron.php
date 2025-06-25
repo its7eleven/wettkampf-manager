@@ -1,6 +1,6 @@
 <?php
 /**
- * Cron job management class - KORRIGIERT für E-Mail-Versand
+ * Cron job management class - ERWEITERT mit Multi-E-Mail Support
  */
 
 // Prevent direct access
@@ -36,13 +36,22 @@ class WettkampfCron {
             return;
         }
         
-        $export_email = get_option('wettkampf_export_email', '');
-        if (empty($export_email)) {
-            WettkampfHelpers::log_error('Cron Job: Keine Export-E-Mail konfiguriert');
+        // Get export emails
+        if (class_exists('AdminSettings')) {
+            $admin_settings = new AdminSettings();
+            $export_emails = $admin_settings->get_export_emails();
+        } else {
+            // Fallback: Parse from option
+            $export_email_text = get_option('wettkampf_export_email', '');
+            $export_emails = $this->parse_export_emails($export_email_text);
+        }
+        
+        if (empty($export_emails)) {
+            WettkampfHelpers::log_error('Cron Job: Keine Export-E-Mail-Adressen konfiguriert');
             return;
         }
         
-        WettkampfHelpers::log_error('Cron Job: Export-E-Mail konfiguriert: ' . $export_email);
+        WettkampfHelpers::log_error('Cron Job: Export-E-Mail-Adressen konfiguriert: ' . implode(', ', $export_emails));
         
         global $wpdb;
         $tables = WettkampfDatabase::get_table_names();
@@ -71,9 +80,9 @@ class WettkampfCron {
                 continue;
             }
             
-            WettkampfHelpers::log_error('Cron Job: Sende Export für Wettkampf ' . $wettkampf->name . ' (ID: ' . $wettkampf->id . ')');
+            WettkampfHelpers::log_error('Cron Job: Sende Export für Wettkampf ' . $wettkampf->name . ' (ID: ' . $wettkampf->id . ') an ' . count($export_emails) . ' E-Mail-Adressen');
             
-            $result = $this->send_automatic_export($wettkampf);
+            $result = $this->send_automatic_export($wettkampf, $export_emails);
             
             if ($result) {
                 // Markiere als gesendet
@@ -86,12 +95,23 @@ class WettkampfCron {
     }
     
     /**
-     * Send automatic CSV export for a competition
+     * Send automatic CSV export for a competition - ERWEITERT mit Multi-E-Mail Support
      */
-    public function send_automatic_export($wettkampf) {
-        $export_email = get_option('wettkampf_export_email', '');
-        if (empty($export_email)) {
-            WettkampfHelpers::log_error('send_automatic_export: Keine Export-E-Mail konfiguriert');
+    public function send_automatic_export($wettkampf, $export_emails = null) {
+        // Get export emails if not provided
+        if ($export_emails === null) {
+            if (class_exists('AdminSettings')) {
+                $admin_settings = new AdminSettings();
+                $export_emails = $admin_settings->get_export_emails();
+            } else {
+                // Fallback: Parse from option
+                $export_email_text = get_option('wettkampf_export_email', '');
+                $export_emails = $this->parse_export_emails($export_email_text);
+            }
+        }
+        
+        if (empty($export_emails)) {
+            WettkampfHelpers::log_error('send_automatic_export: Keine Export-E-Mail-Adressen konfiguriert');
             return false;
         }
         
@@ -101,21 +121,62 @@ class WettkampfCron {
         }
         
         $email_manager = new EmailManager();
-        $result = $email_manager->send_automatic_export($wettkampf, $export_email);
+        $result = $email_manager->send_automatic_export($wettkampf, $export_emails);
         
         return $result;
     }
     
     /**
-     * Manuelle Test-Funktion für Debugging
+     * Parse export email addresses from text
+     */
+    private function parse_export_emails($export_email_text) {
+        if (empty($export_email_text)) {
+            return array();
+        }
+        
+        $lines = explode("\n", $export_email_text);
+        $valid_emails = array();
+        
+        foreach ($lines as $line) {
+            $email = trim($line);
+            
+            // Skip empty lines
+            if (empty($email)) {
+                continue;
+            }
+            
+            // Validate email
+            if (is_email($email)) {
+                $valid_emails[] = $email;
+                
+                // Limit to 5 addresses
+                if (count($valid_emails) >= 5) {
+                    break;
+                }
+            }
+        }
+        
+        return $valid_emails;
+    }
+    
+    /**
+     * Manuelle Test-Funktion für Debugging - ERWEITERT
      */
     public static function test_cron_manually() {
         $cron = new self();
         
-        // Temporär die Stundenprüfung umgehen
-        $export_email = get_option('wettkampf_export_email', '');
-        if (empty($export_email)) {
-            return 'Keine Export-E-Mail konfiguriert';
+        // Get export emails
+        if (class_exists('AdminSettings')) {
+            $admin_settings = new AdminSettings();
+            $export_emails = $admin_settings->get_export_emails();
+        } else {
+            // Fallback: Parse from option
+            $export_email_text = get_option('wettkampf_export_email', '');
+            $export_emails = $cron->parse_export_emails($export_email_text);
+        }
+        
+        if (empty($export_emails)) {
+            return 'Keine Export-E-Mail-Adressen konfiguriert';
         }
         
         global $wpdb;
@@ -145,11 +206,11 @@ class WettkampfCron {
         delete_option('wettkampf_export_sent_' . $wettkampf->id);
         
         // Sende Export
-        $result = $cron->send_automatic_export($wettkampf);
+        $result = $cron->send_automatic_export($wettkampf, $export_emails);
         
         if ($result) {
             update_option('wettkampf_export_sent_' . $wettkampf->id, current_time('mysql'));
-            return 'Test-Export erfolgreich gesendet für: ' . $wettkampf->name;
+            return 'Test-Export erfolgreich gesendet für: ' . $wettkampf->name . ' an ' . count($export_emails) . ' E-Mail-Adresse(n): ' . implode(', ', $export_emails);
         } else {
             return 'Fehler beim Senden des Test-Exports für: ' . $wettkampf->name;
         }

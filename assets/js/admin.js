@@ -1,332 +1,513 @@
-jQuery(document).ready(function($) {
-    'use strict';
+<?php
+/**
+ * Competition management admin class - ERWEITERT mit Suchfunktion
+ */
+
+// Prevent direct access
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+class AdminWettkampf {
     
-    // Admin-specific functionality for wettkampf anmeldungen page
-    
-    // Simple inline edit functionality for admin
-    $('.edit-anmeldung-admin').on('click', function(e) {
-        e.preventDefault();
-        const anmeldungId = $(this).data('anmeldung-id');
-        const editUrl = '?page=wettkampf-anmeldungen&edit=' + anmeldungId;
-        window.location.href = editUrl;
-    });
-    
-    // Confirmation dialogs for deletions
-    $('a[href*="delete="]').on('click', function(e) {
-        const href = $(this).attr('href');
-        if (href.indexOf('delete=') > -1) {
-            const confirmMessage = $(this).text().toLowerCase().indexOf('anmeldung') > -1 
-                ? 'Anmeldung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.'
-                : 'Eintrag wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.';
-            
-            if (!confirm(confirmMessage)) {
-                e.preventDefault();
-                return false;
+    /**
+     * Display overview page - ERWEITERT mit Suchfunktion und Kopierfunktion
+     */
+    public function display_overview_page() {
+        // Handle delete action
+        if (isset($_GET['delete']) && wp_verify_nonce($_GET['_wpnonce'], 'delete_wettkampf')) {
+            $id = intval($_GET['delete']);
+            $this->delete_wettkampf_by_id($id);
+            WettkampfHelpers::add_admin_notice('Wettkampf und alle Anmeldungen gelöscht!');
+        }
+        
+        // Handle copy action
+        if (isset($_GET['copy']) && wp_verify_nonce($_GET['_wpnonce'], 'copy_wettkampf')) {
+            $id = intval($_GET['copy']);
+            $new_id = $this->copy_wettkampf($id);
+            if ($new_id) {
+                WettkampfHelpers::add_admin_notice('Wettkampf erfolgreich kopiert! Du kannst ihn jetzt bearbeiten.');
+                // Redirect to edit the new competition
+                wp_redirect(admin_url('admin.php?page=wettkampf-new&edit=' . $new_id));
+                exit;
+            } else {
+                WettkampfHelpers::add_admin_notice('Fehler beim Kopieren des Wettkampfs.', 'error');
             }
         }
-    });
-    
-    // Export button loading states
-    $('.export-button').on('click', function() {
-        const button = $(this);
-        const originalText = button.text();
         
-        button.text('Export wird erstellt...');
-        button.addClass('loading');
+        // Get filter parameters
+        $current_filter = isset($_GET['filter']) ? sanitize_text_field($_GET['filter']) : 'all';
+        $search_term = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
         
-        // Reset after 5 seconds (export should be complete by then)
-        setTimeout(function() {
-            button.text(originalText);
-            button.removeClass('loading');
-        }, 5000);
-    });
-    
-    // Auto-submit filter forms when dropdowns change
-    $('select[name="wettkampf_id"]').on('change', function() {
-        if ($(this).closest('form').find('input[name="search"]').val() === '') {
-            $(this).closest('form').submit();
-        }
-    });
-    
-    // Enhanced table row highlighting
-    $('.wp-list-table tbody tr').hover(
-        function() {
-            $(this).addClass('hover-highlight');
-        },
-        function() {
-            $(this).removeClass('hover-highlight');
-        }
-    );
-    
-    // Add visual feedback for form submissions
-    $('form').on('submit', function() {
-        const submitButton = $(this).find('input[type="submit"], button[type="submit"]');
-        const originalValue = submitButton.val() || submitButton.text();
+        $wettkaempfe = WettkampfDatabase::get_competitions_with_counts($current_filter, $search_term);
         
-        submitButton.prop('disabled', true);
-        if (submitButton.is('input')) {
-            submitButton.val('Wird gespeichert...');
-        } else {
-            submitButton.text('Wird gespeichert...');
-        }
+        // Calculate counts for tabs (without search)
+        $alle_count = count(WettkampfDatabase::get_competitions_with_counts('all'));
+        $aktive_count = count(WettkampfDatabase::get_competitions_with_counts('active'));
+        $vergangene_count = count(WettkampfDatabase::get_competitions_with_counts('inactive'));
         
-        // Reset if form validation fails (after a short delay)
-        setTimeout(function() {
-            if (submitButton.prop('disabled')) {
-                submitButton.prop('disabled', false);
-                if (submitButton.is('input')) {
-                    submitButton.val(originalValue);
-                } else {
-                    submitButton.text(originalValue);
+        ?>
+        <div class="wrap">
+            <h1>Wettkampf Manager <a href="?page=wettkampf-new" class="page-title-action">Neuer Wettkampf</a></h1>
+            
+            <!-- Search Form -->
+            <div class="wettkampf-search-form">
+                <form method="get" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; width: 100%;">
+                    <input type="hidden" name="page" value="wettkampf-manager">
+                    <input type="hidden" name="filter" value="<?php echo esc_attr($current_filter); ?>">
+                    
+                    <label for="search" style="margin: 0; font-weight: 600;">🔍 Suche:</label>
+                    <input type="text" 
+                           id="search" 
+                           name="search" 
+                           value="<?php echo esc_attr($search_term); ?>" 
+                           placeholder="Name, Ort oder Beschreibung durchsuchen..." 
+                           style="min-width: 300px; padding: 8px 12px; flex: 1; max-width: 400px;">
+                    
+                    <button type="submit" class="button">Suchen</button>
+                    
+                    <?php if (!empty($search_term)): ?>
+                        <a href="?page=wettkampf-manager&filter=<?php echo esc_attr($current_filter); ?>" class="button">Zurücksetzen</a>
+                    <?php endif; ?>
+                    
+                    <div style="flex: 1; text-align: right; font-size: 13px; color: #666;">
+                        <strong>Tipp:</strong> Ctrl+F für Schnellsuche
+                    </div>
+                </form>
+                
+                <?php if (!empty($search_term)): ?>
+                    <div class="search-results-info">
+                        <strong>Suchergebnis für:</strong> "<?php echo esc_html($search_term); ?>" 
+                        - <?php echo count($wettkaempfe); ?> Wettkampf<?php echo count($wettkaempfe) != 1 ? 'e' : ''; ?> gefunden
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <!-- Filter Tabs -->
+            <ul class="subsubsub">
+                <li class="all">
+                    <a href="?page=wettkampf-manager&filter=all<?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" 
+                       class="<?php echo $current_filter === 'all' ? 'current' : ''; ?>">
+                        Alle <span class="count">(<?php echo $alle_count; ?>)</span>
+                    </a> |
+                </li>
+                <li class="active">
+                    <a href="?page=wettkampf-manager&filter=active<?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" 
+                       class="<?php echo $current_filter === 'active' ? 'current' : ''; ?>">
+                        Aktive <span class="count">(<?php echo $aktive_count; ?>)</span>
+                    </a> |
+                </li>
+                <li class="inactive">
+                    <a href="?page=wettkampf-manager&filter=inactive<?php echo !empty($search_term) ? '&search=' . urlencode($search_term) : ''; ?>" 
+                       class="<?php echo $current_filter === 'inactive' ? 'current' : ''; ?>">
+                        Vergangene <span class="count">(<?php echo $vergangene_count; ?>)</span>
+                    </a>
+                </li>
+            </ul>
+
+            <?php if (empty($wettkaempfe) && !empty($search_term)): ?>
+                <div class="search-no-results">
+                    <h3>🔍 Keine Wettkämpfe gefunden</h3>
+                    <p>Für den Suchbegriff "<strong><?php echo esc_html($search_term); ?></strong>" wurden keine Wettkämpfe gefunden.</p>
+                    <a href="?page=wettkampf-manager&filter=<?php echo esc_attr($current_filter); ?>" class="button button-primary">Alle Wettkämpfe anzeigen</a>
+                    <p style="margin-top: 15px; font-size: 14px; color: #666;">
+                        <strong>Suchbereiche:</strong> Name, Ort, Beschreibung<br>
+                        <strong>Tipp:</strong> Versuche es mit weniger spezifischen Begriffen
+                    </p>
+                </div>
+            <?php elseif (empty($wettkaempfe)): ?>
+                <div class="search-no-results">
+                    <h3>🏃‍♂️ Noch keine Wettkämpfe vorhanden</h3>
+                    <p>Erstelle deinen ersten Wettkampf, um loszulegen.</p>
+                    <a href="?page=wettkampf-new" class="button button-primary">Neuer Wettkampf</a>
+                </div>
+            <?php else: ?>
+                <table class="wp-list-table widefat fixed striped search-results">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">Name</th>
+                            <th style="width: 10%;">Datum</th>
+                            <th style="width: 15%;">Ort</th>
+                            <th style="width: 10%;">Anmeldeschluss</th>
+                            <th style="width: 8%;">Anmeldungen</th>
+                            <th style="width: 8%;">Lizenziert</th>
+                            <th style="width: 14%;">Disziplinen</th>
+                            <th style="width: 10%;">Aktionen</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($wettkaempfe as $wettkampf): ?>
+                        <tr>
+                            <td>
+                                <strong><?php echo SecurityManager::escape_html($wettkampf->name); ?></strong>
+                                <?php if ($wettkampf->beschreibung && !empty($search_term) && stripos($wettkampf->beschreibung, $search_term) !== false): ?>
+                                    <br><small style="color: #666; font-style: italic;">
+                                        <?php echo WettkampfHelpers::truncate_text($wettkampf->beschreibung, 80); ?>
+                                    </small>
+                                <?php endif; ?>
+                            </td>
+                            <td><?php echo WettkampfHelpers::format_german_date($wettkampf->datum); ?></td>
+                            <td><?php echo SecurityManager::escape_html($wettkampf->ort); ?></td>
+                            <td><?php echo WettkampfHelpers::format_german_date($wettkampf->anmeldeschluss); ?></td>
+                            <td><strong><?php echo $wettkampf->anmeldungen_count; ?></strong></td>
+                            <td><?php echo $wettkampf->lizenziert ? 'Ja' : 'Nein'; ?></td>
+                            <td>
+                                <?php echo $this->get_competition_disciplines_display($wettkampf->id); ?>
+                            </td>
+                            <td>
+                                <a href="?page=wettkampf-new&edit=<?php echo $wettkampf->id; ?>" title="Wettkampf bearbeiten">Bearbeiten</a> |
+                                <a href="?page=wettkampf-manager&copy=<?php echo $wettkampf->id; ?>&_wpnonce=<?php echo wp_create_nonce('copy_wettkampf'); ?>" 
+                                   title="Wettkampf kopieren" 
+                                   onclick="return confirm('Wettkampf &quot;<?php echo SecurityManager::escape_attr($wettkampf->name); ?>&quot; kopieren?\n\nEs wird eine Kopie mit allen Disziplinen erstellt, die du dann bearbeiten kannst.')" 
+                                   style="color: #0073aa;">Kopieren</a> |
+                                <a href="?page=wettkampf-anmeldungen&wettkampf_id=<?php echo $wettkampf->id; ?>" title="Anmeldungen verwalten">Anmeldungen (<?php echo $wettkampf->anmeldungen_count; ?>)</a> |
+                                <a href="?page=wettkampf-manager&delete=<?php echo $wettkampf->id; ?>&_wpnonce=<?php echo wp_create_nonce('delete_wettkampf'); ?>" 
+                                   onclick="return confirm('⚠️ ACHTUNG: Beim Löschen werden auch ALLE Anmeldungen (<?php echo $wettkampf->anmeldungen_count; ?> Stück) gelöscht!\n\nWirklich fortfahren?')" 
+                                   style="color: #d63638;" title="Wettkampf löschen">Löschen</a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+            
+            <?php if (!empty($search_term) && !empty($wettkaempfe)): ?>
+                <div class="search-tips">
+                    <strong>💡 Suchtipps:</strong> Du kannst nach Namen, Orten oder Beschreibungen suchen. 
+                    <a href="?page=wettkampf-manager&filter=<?php echo esc_attr($current_filter); ?>">Alle Wettkämpfe anzeigen</a>
+                </div>
+            <?php endif; ?>
+        </div>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            // Auto-submit on Enter key
+            $('#search').on('keypress', function(e) {
+                if (e.which === 13) {
+                    $(this).closest('form').submit();
+                }
+            });
+            
+            // Keyboard shortcut: Ctrl/Cmd + F to focus search
+            $(document).on('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                    e.preventDefault();
+                    $('#search').focus().select();
+                }
+                
+                // Escape to clear search
+                if (e.key === 'Escape' && $('#search').is(':focus')) {
+                    $('#search').val('');
+                }
+            });
+            
+            // Focus search field if there's a search term
+            <?php if (!empty($search_term)): ?>
+            $('#search').focus().get(0).setSelectionRange(<?php echo strlen($search_term); ?>, <?php echo strlen($search_term); ?>);
+            <?php endif; ?>
+            
+            // Highlight search terms in results
+            function highlightSearchTerms() {
+                var searchTerm = '<?php echo esc_js($search_term); ?>';
+                if (searchTerm.length > 0) {
+                    var regex = new RegExp('(' + searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+                    
+                    $('.wp-list-table tbody td').each(function() {
+                        var text = $(this).html();
+                        var highlightedText = text.replace(regex, '<span class="search-highlight">$1</span>');
+                        if (text !== highlightedText) {
+                            $(this).html(highlightedText);
+                        }
+                    });
                 }
             }
-        }, 3000);
-    });
-    
-    // Toggle functionality for freie_plaetze in edit forms
-    function toggleFreePlaetze() {
-        const selectedValue = $('input[name="eltern_fahren"]:checked').val();
-        const row = $('#freie_plaetze_row');
-        const input = $('#freie_plaetze');
-        
-        console.log('toggleFreePlaetze called, selected:', selectedValue);
-        
-        if (row.length && input.length) {
-            if (selectedValue === 'ja') {
-                row.show();
-                input.attr('required', 'required');
-            } else {
-                row.hide();
-                input.removeAttr('required');
-                if (selectedValue !== 'ja') {
-                    input.val('0');
-                }
-            }
-        }
-    }
-    
-    // Attach toggle functionality to radio buttons
-    $(document).on('change', 'input[name="eltern_fahren"]', function() {
-        console.log('Transport option changed to:', $(this).val());
-        toggleFreePlaetze();
-    });
-    
-    // Initialize toggle state on page load
-    if ($('input[name="eltern_fahren"]').length > 0) {
-        setTimeout(function() {
-            toggleFreePlaetze();
-        }, 100);
-    }
-    
-    // Add sorting functionality to tables (simple client-side)
-    $('.wp-list-table th').on('click', function() {
-        const table = $(this).closest('table');
-        const columnIndex = $(this).index();
-        const rows = table.find('tbody tr').toArray();
-        
-        // Skip if this is the actions column or if there are no rows
-        if ($(this).text().toLowerCase().indexOf('aktionen') > -1 || rows.length === 0) {
-            return;
-        }
-        
-        const isAscending = $(this).hasClass('sort-asc');
-        
-        // Remove all sort classes
-        table.find('th').removeClass('sort-asc sort-desc');
-        
-        // Sort rows
-        rows.sort(function(a, b) {
-            const aText = $(a).find('td').eq(columnIndex).text().trim();
-            const bText = $(b).find('td').eq(columnIndex).text().trim();
             
-            // Try to parse as numbers for numeric columns
-            const aNum = parseFloat(aText.replace(/[^\d.-]/g, ''));
-            const bNum = parseFloat(bText.replace(/[^\d.-]/g, ''));
-            
-            let comparison = 0;
-            if (!isNaN(aNum) && !isNaN(bNum)) {
-                comparison = aNum - bNum;
-            } else {
-                comparison = aText.localeCompare(bText, 'de', { numeric: true });
-            }
-            
-            return isAscending ? -comparison : comparison;
+            // Apply highlighting
+            <?php if (!empty($search_term)): ?>
+            highlightSearchTerms();
+            <?php endif; ?>
         });
-        
-        // Add sort class and rebuild table
-        $(this).addClass(isAscending ? 'sort-desc' : 'sort-asc');
-        table.find('tbody').empty().append(rows);
-    });
-    
-    // Search functionality enhancement
-    $('input[name="search"]').on('keyup', function(e) {
-        if (e.keyCode === 13) { // Enter key
-            $(this).closest('form').submit();
-        }
-    });
-    
-    // Add clear search button functionality
-    if ($('input[name="search"]').val()) {
-        $('input[name="search"]').after('<button type="button" class="button search-clear" style="margin-left: 5px;">✖</button>');
+        </script>
+        <?php
     }
     
-    $(document).on('click', '.search-clear', function() {
-        const form = $(this).closest('form');
-        form.find('input[name="search"]').val('');
-        form.submit();
-    });
-    
-    // Statistics card animations
-    $('.stat-card').each(function(index) {
-        const card = $(this);
-        setTimeout(function() {
-            card.addClass('animate-in');
-        }, index * 100);
-    });
-    
-    // Form validation enhancements
-    $('form input[required], form select[required]').on('blur', function() {
-        const field = $(this);
-        const value = field.val();
+    /**
+     * Display form page (new/edit)
+     */
+    public function display_form_page() {
+        $wettkampf = null;
         
-        if (!value || value.trim() === '') {
-            field.addClass('error');
+        if (isset($_GET['edit'])) {
+            $id = intval($_GET['edit']);
+            $wettkampf = WettkampfDatabase::get_competition($id);
+        }
+        
+        ?>
+        <div class="wrap">
+            <h1><?php echo $wettkampf ? 'Wettkampf bearbeiten' : 'Neuer Wettkampf'; ?></h1>
+            
+            <form method="post" action="<?php echo admin_url('admin-post.php'); ?>">
+                <input type="hidden" name="action" value="save_wettkampf">
+                <?php if ($wettkampf): ?>
+                <input type="hidden" name="wettkampf_id" value="<?php echo $wettkampf->id; ?>">
+                <?php endif; ?>
+                <?php wp_nonce_field('save_wettkampf', 'wettkampf_nonce'); ?>
+                
+                <table class="form-table">
+                    <?php
+                    WettkampfHelpers::render_form_row(
+                        'Name',
+                        '<input type="text" id="name" name="name" value="' . ($wettkampf ? SecurityManager::escape_attr($wettkampf->name) : '') . '" class="regular-text" required>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Datum',
+                        '<input type="date" id="datum" name="datum" value="' . ($wettkampf ? $wettkampf->datum : '') . '" required>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Ort',
+                        '<input type="text" id="ort" name="ort" value="' . ($wettkampf ? SecurityManager::escape_attr($wettkampf->ort) : '') . '" class="regular-text" required>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Beschreibung',
+                        '<textarea id="beschreibung" name="beschreibung" rows="5" class="large-text">' . ($wettkampf ? SecurityManager::escape_html($wettkampf->beschreibung) : '') . '</textarea>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Startberechtigte',
+                        '<textarea id="startberechtigte" name="startberechtigte" rows="3" class="large-text">' . ($wettkampf ? SecurityManager::escape_html($wettkampf->startberechtigte) : '') . '</textarea>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Anmeldeschluss',
+                        '<input type="date" id="anmeldeschluss" name="anmeldeschluss" value="' . ($wettkampf ? $wettkampf->anmeldeschluss : '') . '" required>'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Link zum Event',
+                        '<input type="url" id="event_link" name="event_link" value="' . ($wettkampf ? SecurityManager::escape_attr($wettkampf->event_link) : '') . '" class="regular-text">'
+                    );
+                    
+                    WettkampfHelpers::render_form_row(
+                        'Lizenzierter Event',
+                        '<input type="checkbox" id="lizenziert" name="lizenziert" value="1" ' . (($wettkampf && $wettkampf->lizenziert) ? 'checked' : '') . '>'
+                    );
+                    ?>
+                    
+                    <tr>
+                        <th><label for="disziplinen">Disziplinen</label></th>
+                        <td>
+                            <?php echo $this->render_disciplines_selector($wettkampf); ?>
+                        </td>
+                    </tr>
+                </table>
+                
+                <p class="submit">
+                    <input type="submit" name="submit" class="button-primary" value="<?php echo $wettkampf ? 'Aktualisieren' : 'Speichern'; ?>">
+                    <a href="?page=wettkampf-manager" class="button">Abbrechen</a>
+                </p>
+            </form>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Render disciplines selector
+     */
+    private function render_disciplines_selector($wettkampf) {
+        $grouped_disciplines = WettkampfDatabase::get_disciplines_grouped();
+        
+        // Get selected disciplines
+        $selected_disciplines = array();
+        if ($wettkampf) {
+            global $wpdb;
+            $tables = WettkampfDatabase::get_table_names();
+            $assignments = $wpdb->get_results($wpdb->prepare(
+                "SELECT disziplin_id FROM {$tables['disziplin_zuordnung']} WHERE wettkampf_id = %d", 
+                $wettkampf->id
+            ));
+            foreach ($assignments as $assignment) {
+                $selected_disciplines[] = $assignment->disziplin_id;
+            }
+        }
+        
+        if (empty($grouped_disciplines)) {
+            return '<p><em>Keine Disziplinen verfügbar. <a href="?page=wettkampf-disziplinen">Disziplinen verwalten</a></em></p>';
+        }
+        
+        ob_start();
+        ?>
+        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; background: #f9f9f9;">
+            <div style="margin-bottom: 10px; padding: 5px 10px; background: #e0f2fe; border-radius: 5px; font-size: 12px; color: #0891b2;">
+                <strong>💡 Tipp:</strong> Wähle nur die Disziplinen aus, die für diesen Wettkampf relevant sind. 
+                Die Teilnehmer sehen nur Disziplinen ihrer Alterskategorie.
+            </div>
+            
+            <?php 
+            $sorted_groups = CategoryCalculator::sort_categories($grouped_disciplines);
+            foreach ($sorted_groups as $kategorie => $disziplinen): 
+            ?>
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 10px 0; color: #374151; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">
+                        <?php echo WettkampfHelpers::get_category_badge($kategorie); ?>
+                    </h4>
+                    <div style="margin-left: 10px;">
+                        <?php foreach ($disziplinen as $disziplin): ?>
+                            <label style="display: block; margin-bottom: 8px; padding: 5px; border-radius: 3px; transition: background-color 0.2s;">
+                                <input type="checkbox" name="disziplinen[]" value="<?php echo $disziplin->id; ?>" 
+                                       <?php echo in_array($disziplin->id, $selected_disciplines) ? 'checked' : ''; ?>>
+                                <strong><?php echo SecurityManager::escape_html($disziplin->name); ?></strong>
+                                <?php if ($disziplin->beschreibung): ?>
+                                    <small style="color: #666; margin-left: 10px;">(<?php echo SecurityManager::escape_html($disziplin->beschreibung); ?>)</small>
+                                <?php endif; ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+        <small>Lasse alle unausgewählt, wenn dieser Wettkampf keine spezifischen Disziplinen hat.</small>
+        <?php
+        return ob_get_clean();
+    }
+    
+    /**
+     * Get competition disciplines display
+     */
+    private function get_competition_disciplines_display($wettkampf_id) {
+        $disciplines = WettkampfDatabase::get_competition_disciplines($wettkampf_id);
+        
+        $discipline_info = array();
+        if (is_array($disciplines) && !empty($disciplines)) {
+            foreach ($disciplines as $d) {
+                if (is_object($d) && isset($d->name) && !empty($d->name)) {
+                    $info = SecurityManager::escape_html($d->name);
+                    if (!empty($d->kategorie) && $d->kategorie !== 'Alle') {
+                        $info .= ' ' . WettkampfHelpers::get_category_badge($d->kategorie);
+                    }
+                    $discipline_info[] = $info;
+                }
+            }
+        }
+        
+        if (!empty($discipline_info)) {
+            return '<small>' . implode(', ', $discipline_info) . '</small>';
         } else {
-            field.removeClass('error');
-            
-            // Additional validation for specific fields
-            if (field.attr('type') === 'email') {
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (!emailRegex.test(value)) {
-                    field.addClass('error');
-                } else {
-                    field.removeClass('error');
-                }
-            }
-            
-            if (field.attr('name') === 'jahrgang') {
-                const year = parseInt(value);
-                const currentYear = new Date().getFullYear();
-                if (year < 1900 || year > currentYear || value.length !== 4) {
-                    field.addClass('error');
-                } else {
-                    field.removeClass('error');
-                }
-            }
+            return '<small>Keine Disziplinen</small>';
         }
-    });
+    }
     
-    // Auto-save draft functionality for forms (localStorage fallback)
-    const formSelector = 'form[method="post"]';
-    let formChanged = false;
-    
-    $(formSelector + ' input, ' + formSelector + ' select, ' + formSelector + ' textarea').on('input change', function() {
-        formChanged = true;
+    /**
+     * Save competition
+     */
+    public function save_wettkampf() {
+        // Verify nonce and permissions
+        if (!wp_verify_nonce($_POST['wettkampf_nonce'], 'save_wettkampf')) {
+            wp_die('Sicherheitsfehler');
+        }
         
-        // Simple auto-save to localStorage (only for longer forms)
-        if ($(formSelector + ' .form-table tr').length > 5) {
-            const formData = {};
-            $(formSelector + ' input, ' + formSelector + ' select, ' + formSelector + ' textarea').each(function() {
-                const field = $(this);
-                const name = field.attr('name');
-                if (name) {
-                    formData[name] = field.val();
-                }
-            });
-            
-            try {
-                localStorage.setItem('wettkampf_form_draft', JSON.stringify(formData));
-            } catch (e) {
-                // localStorage not available
-            }
-        }
-    });
-    
-    // Restore draft on page load
-    try {
-        const savedDraft = localStorage.getItem('wettkampf_form_draft');
-        if (savedDraft && !$('input[name="wettkampf_id"], input[name="anmeldung_id"]').val()) {
-            const formData = JSON.parse(savedDraft);
-            Object.keys(formData).forEach(function(name) {
-                const field = $('input[name="' + name + '"], select[name="' + name + '"], textarea[name="' + name + '"]');
-                if (field.length && formData[name]) {
-                    field.val(formData[name]);
-                }
-            });
-            
-            // Show restore notification
-            if (Object.keys(formData).length > 0) {
-                $('<div class="notice notice-info"><p>Entwurf wiederhergestellt. <a href="#" id="clear-draft">Entwurf löschen</a></p></div>').insertAfter('h1').first();
-            }
-        }
-    } catch (e) {
-        // JSON parse error or localStorage not available
-    }
-    
-    // Clear draft
-    $(document).on('click', '#clear-draft', function(e) {
-        e.preventDefault();
-        try {
-            localStorage.removeItem('wettkampf_form_draft');
-            $(this).closest('.notice').fadeOut();
-        } catch (e) {
-            // localStorage not available
-        }
-    });
-    
-    // Clear draft on successful form submission - WICHTIG: formChanged auf false setzen
-    $(formSelector).on('submit', function() {
-        formChanged = false; // WICHTIG: Verhindert die Warnmeldung beim Submit
-        try {
-            localStorage.removeItem('wettkampf_form_draft');
-        } catch (e) {
-            // localStorage not available
-        }
-    });
-    
-    // Accessibility improvements
-    
-    // Add ARIA labels to action links
-    $('a[href*="edit="]').attr('aria-label', function() {
-        const row = $(this).closest('tr');
-        const name = row.find('td:first').text().trim();
-        return 'Bearbeite ' + name;
-    });
-    
-    $('a[href*="delete="]').attr('aria-label', function() {
-        const row = $(this).closest('tr');
-        const name = row.find('td:first').text().trim();
-        return 'Lösche ' + name;
-    });
-    
-    // Keyboard navigation for tables
-    $('.wp-list-table tbody tr').attr('tabindex', '0').on('keydown', function(e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-            const editLink = $(this).find('a[href*="edit="]');
-            if (editLink.length) {
-                e.preventDefault();
-                window.location.href = editLink.attr('href');
-            }
-        }
-    });
-    
-    // Focus management
-    if (window.location.search.indexOf('edit=') > -1) {
-        // Focus first form field when editing
-        setTimeout(function() {
-            $('form input:first, form select:first, form textarea:first').focus();
-        }, 100);
-    }
-    
-    // Print functionality
-    if ($('.export-section').length) {
-        $('.export-section .export-buttons').append(
-            '<button type="button" class="export-button print-button" onclick="window.print()" style="background: #6c757d;">🖨️ Drucken</button>'
+        SecurityManager::check_admin_permissions();
+        
+        // Sanitize and validate data
+        $sanitization_rules = array(
+            'name' => 'text',
+            'datum' => 'text',
+            'ort' => 'text',
+            'beschreibung' => 'textarea',
+            'startberechtigte' => 'textarea',
+            'anmeldeschluss' => 'text',
+            'event_link' => 'url',
+            'disziplinen' => 'array'
         );
+        
+        $data = SecurityManager::sanitize_form_data($_POST, $sanitization_rules);
+        
+        // Validation rules
+        $validation_rules = array(
+            'name' => array('required' => true, 'min_length' => 3),
+            'datum' => array('required' => true),
+            'ort' => array('required' => true, 'min_length' => 2),
+            'anmeldeschluss' => array('required' => true)
+        );
+        
+        $validation = SecurityManager::validate_form_data($data, $validation_rules);
+        
+        if (!$validation['valid']) {
+            wp_die('Validierungsfehler: ' . implode(', ', $validation['errors']));
+        }
+        
+        // Save competition
+        $wettkampf_id = null;
+        if (isset($_POST['wettkampf_id']) && !empty($_POST['wettkampf_id'])) {
+            $wettkampf_id = intval($_POST['wettkampf_id']);
+        }
+        
+        $result = WettkampfDatabase::save_competition($data, $wettkampf_id);
+        
+        if ($result) {
+            wp_redirect(admin_url('admin.php?page=wettkampf-manager'));
+            exit;
+        } else {
+            wp_die('Fehler beim Speichern des Wettkampfs');
+        }
     }
     
-    // Success message auto-hide
-    $('.notice-success').delay(5000).fadeOut(500);
+    /**
+     * Copy competition with all disciplines
+     */
+    public function copy_wettkampf($original_id) {
+        SecurityManager::check_admin_permissions();
+        
+        // Get original competition
+        $original = WettkampfDatabase::get_competition($original_id);
+        if (!$original) {
+            return false;
+        }
+        
+        // Prepare data for new competition
+        $new_data = array(
+            'name' => $original->name . ' (Kopie)',
+            'datum' => $original->datum,
+            'ort' => $original->ort,
+            'beschreibung' => $original->beschreibung,
+            'startberechtigte' => $original->startberechtigte,
+            'anmeldeschluss' => $original->anmeldeschluss,
+            'event_link' => $original->event_link,
+            'lizenziert' => $original->lizenziert
+        );
+        
+        // Get assigned disciplines
+        global $wpdb;
+        $tables = WettkampfDatabase::get_table_names();
+        $discipline_assignments = $wpdb->get_results($wpdb->prepare(
+            "SELECT disziplin_id FROM {$tables['disziplin_zuordnung']} WHERE wettkampf_id = %d",
+            $original_id
+        ));
+        
+        $discipline_ids = array();
+        foreach ($discipline_assignments as $assignment) {
+            $discipline_ids[] = $assignment->disziplin_id;
+        }
+        
+        $new_data['disziplinen'] = $discipline_ids;
+        
+        // Save new competition
+        $new_id = WettkampfDatabase::save_competition($new_data);
+        
+        if ($new_id) {
+            WettkampfHelpers::log_error('Wettkampf kopiert: Original ID ' . $original_id . ', Neue ID ' . $new_id);
+        }
+        
+        return $new_id;
+    }
     
-    console.log('Wettkampf Admin JS loaded successfully');
-});
+    /**
+     * Delete competition by ID
+     */
+    public function delete_wettkampf_by_id($id) {
+        SecurityManager::check_admin_permissions();
+        return WettkampfDatabase::delete_competition($id);
+    }
+}
